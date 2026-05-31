@@ -1,0 +1,19 @@
+# Render Blueprint — lightweight backend for the LinkedIn Bot UI.
+#
+# Serves the "light" API endpoints (config, status, URL-shorten, resume
+# uploads). The Selenium/Chrome bot stages are NOT run here — keep running
+# those locally. Bot endpoints intentionally return a clear 501 message.
+#
+# Deploy: push this repo to GitHub, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file.
+services:
+  - type: web
+    name: linkdinbot-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn api.index:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
