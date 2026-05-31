@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Icon from './Icon';
 
 function TabEmail({ config, status, apiUrl }) {
   const settings = config.settings || {};
@@ -11,7 +12,7 @@ function TabEmail({ config, status, apiUrl }) {
 
   return (
     <div>
-      <h2>📨 Email recruiters</h2>
+      <h2 className="heading-with-icon"><Icon name="mail" /> Email recruiters</h2>
       <p>Send personalised emails to collected recruiters from Stages 2 & 3.</p>
 
       <div style={{ marginTop: '20px' }}>
@@ -47,7 +48,7 @@ function TabEmail({ config, status, apiUrl }) {
             cursor: 'pointer',
           }}
         >
-          👀 Dry run
+          <span className="button-with-icon"><Icon name="eye" size={16} /> Dry run</span>
         </button>
         <button
           onClick={() => send(false)}
@@ -61,7 +62,7 @@ function TabEmail({ config, status, apiUrl }) {
             fontWeight: 'bold',
           }}
         >
-          📨 Send NOW
+          <span className="button-with-icon"><Icon name="send" size={16} /> Send now</span>
         </button>
       </div>
     </div>

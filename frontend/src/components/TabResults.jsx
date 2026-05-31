@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import Icon from './Icon';
 
 function TabResults({ apiUrl }) {
   const [jobs, setJobs] = useState([]);
@@ -44,7 +45,7 @@ function TabResults({ apiUrl }) {
 
   return (
     <div>
-      <h2>📊 Results</h2>
+      <h2 className="heading-with-icon"><Icon name="table" /> Results</h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', marginTop: '20px' }}>
         <div style={{ background: 'white', padding: '15px', borderRadius: '4px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -108,7 +109,7 @@ function TabResults({ apiUrl }) {
                 <td style={{ padding: '8px' }}>{c.profile_name}</td>
                 <td style={{ padding: '8px' }}>{c.job_title}</td>
                 <td style={{ padding: '8px' }}>{c.email || '—'}</td>
-                <td style={{ padding: '8px' }}>{c.email_sent ? '✅' : '—'}</td>
+                <td style={{ padding: '8px' }}>{c.email_sent ? <span className="inline-status"><Icon name="check" size={14} /> Sent</span> : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -127,7 +128,7 @@ function TabResults({ apiUrl }) {
           cursor: 'pointer',
         }}
       >
-        🗑️ Clear all data
+        <span className="button-with-icon"><Icon name="trash" size={16} /> Clear all data</span>
       </button>
     </div>
   );

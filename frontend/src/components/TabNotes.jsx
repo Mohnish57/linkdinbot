@@ -1,11 +1,12 @@
 import React from 'react';
+import Icon from './Icon';
 
 function TabNotes({ config, saveConfig }) {
   const settings = config.settings || {};
 
   return (
     <div>
-      <h2>💬 Invite Note Templates</h2>
+      <h2 className="heading-with-icon"><Icon name="message" /> Invite Note Templates</h2>
       <p>Placeholders: {'{name}'}, {'{job_title}'}, {'{company}'}, {'{resume_link}'}, {'{candidate_first_name}'}, {'{candidate_bio}'}. LinkedIn cap: 300 chars.</p>
 
       <div style={{ marginTop: '20px' }}>
@@ -49,7 +50,7 @@ function TabNotes({ config, saveConfig }) {
       </div>
 
       <button onClick={() => alert('Saved!')} style={{ marginTop: '20px', padding: '10px 20px', background: '#667eea', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-        💾 Save
+        <span className="button-with-icon"><Icon name="check" size={16} /> Save</span>
       </button>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import Icon from './Icon';
 
 function TabPosts({ config, status, apiUrl }) {
   const settings = config.settings || {};
@@ -61,7 +62,7 @@ function TabPosts({ config, status, apiUrl }) {
 
   return (
     <div>
-      <h2>📰 Search posts & outreach</h2>
+      <h2 className="heading-with-icon"><Icon name="document" /> Search posts & outreach</h2>
       <p>Search public LinkedIn posts by keyword, collect emails found, and send outreach.</p>
 
       <div style={{ marginTop: '20px' }}>
@@ -100,7 +101,7 @@ function TabPosts({ config, status, apiUrl }) {
             opacity: status.state === 'running' ? 0.6 : 1,
           }}
         >
-          🔎 Search posts
+          <span className="button-with-icon"><Icon name="search" size={16} /> Search posts</span>
         </button>
       </div>
 
@@ -122,7 +123,7 @@ function TabPosts({ config, status, apiUrl }) {
                   <td style={{ padding: '8px' }}>{p.keyword}</td>
                   <td style={{ padding: '8px' }}>{p.profile_name}</td>
                   <td style={{ padding: '8px' }}>{p.email || '—'}</td>
-                  <td style={{ padding: '8px' }}>{p.email_sent ? '✅' : '—'}</td>
+                  <td style={{ padding: '8px' }}>{p.email_sent ? <span className="inline-status"><Icon name="check" size={14} /> Sent</span> : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -177,7 +178,7 @@ function TabPosts({ config, status, apiUrl }) {
               opacity: status.state === 'running' ? 0.6 : 1,
             }}
           >
-            👀 Dry run
+            <span className="button-with-icon"><Icon name="eye" size={16} /> Dry run</span>
           </button>
           <button
             onClick={() => sendEmails(false)}
@@ -193,7 +194,7 @@ function TabPosts({ config, status, apiUrl }) {
               fontWeight: 'bold',
             }}
           >
-            📨 Send NOW
+            <span className="button-with-icon"><Icon name="send" size={16} /> Send now</span>
           </button>
         </div>
       </div>

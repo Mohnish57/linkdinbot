@@ -145,7 +145,6 @@ with st.sidebar:
     with st.expander("📨 Gmail (for sending emails to recruiters)"):
         st.caption(
             "Create an App Password at "
-            "[myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). "
             "Required only when you click 'Send emails' in the Email tab."
         )
         gmail_user = st.text_input("Gmail address", value=os.environ.get("GMAIL_USER") or your_email)

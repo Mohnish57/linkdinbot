@@ -16,6 +16,9 @@
   margin: 0;
   font-size: 2.5em;
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .header p {
@@ -56,6 +59,9 @@
   color: #666;
   white-space: nowrap;
   transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .tab-btn:hover {
@@ -73,6 +79,9 @@
   margin: 10px 20px 0 20px;
   border-radius: 6px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .status.running {
@@ -97,6 +106,18 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+}
+
+.icon {
+  flex: 0 0 auto;
+}
+
+.heading-with-icon,
+.button-with-icon,
+.inline-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Responsive */

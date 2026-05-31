@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './Sidebar.css';
+import Icon from './Icon';
 
 function Sidebar({ config, saveConfig }) {
   const candidate = config.candidate || {};
@@ -22,7 +23,7 @@ function Sidebar({ config, saveConfig }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-content">
-        <h2>👤 You</h2>
+        <h2 className="heading-with-icon"><Icon name="user" /> You</h2>
         <input
           type="text"
           placeholder="Full name"
@@ -47,7 +48,7 @@ function Sidebar({ config, saveConfig }) {
 
         <hr />
 
-        <h3>🔑 LinkedIn login</h3>
+        <h3 className="heading-with-icon"><Icon name="key" /> LinkedIn login</h3>
         <input
           type="email"
           placeholder="LinkedIn email"
@@ -65,7 +66,7 @@ function Sidebar({ config, saveConfig }) {
 
         <hr />
 
-        <h3>🤖 Gemini</h3>
+        <h3 className="heading-with-icon"><Icon name="ai" /> Gemini</h3>
         <input
           type="password"
           placeholder="Gemini API key"
@@ -76,7 +77,7 @@ function Sidebar({ config, saveConfig }) {
 
         <hr />
 
-        <h3>📨 Gmail</h3>
+        <h3 className="heading-with-icon"><Icon name="mail" /> Gmail</h3>
         <input
           type="email"
           placeholder="Gmail address"
@@ -91,14 +92,12 @@ function Sidebar({ config, saveConfig }) {
           onChange={(e) => setGmailPassword(e.target.value)}
           className="input"
         />
-        <p style={{ fontSize: '0.85em', marginTop: '8px' }}>
-          Create at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">myaccount.google.com/apppasswords</a>
-        </p>
+       
 
         <hr />
 
         <button onClick={saveCredentials} className="btn btn-primary">
-          💾 Save credentials
+          <span className="button-with-icon"><Icon name="check" size={16} /> Save credentials</span>
         </button>
       </div>
     </aside>

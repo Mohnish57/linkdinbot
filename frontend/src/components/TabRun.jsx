@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import Icon from './Icon';
 
 function TabRun({ config, status, apiUrl }) {
   const [headless, setHeadless] = useState(false);
@@ -22,7 +23,7 @@ function TabRun({ config, status, apiUrl }) {
 
   return (
     <div>
-      <h2>▶️ Run the Bot</h2>
+      <h2 className="heading-with-icon"><Icon name="play" /> Run the Bot</h2>
       <p><strong>Stage 1</strong> — find matching jobs. <strong>Stage 2</strong> — invite hirer + recruiters. <strong>Stage 3</strong> — scrape emails.</p>
 
       <div style={{ marginTop: '20px' }}>
@@ -50,7 +51,7 @@ function TabRun({ config, status, apiUrl }) {
             opacity: status.state === 'running' ? 0.6 : 1,
           }}
         >
-          🔍 Stage 1 — Jobs
+          <span className="button-with-icon"><Icon name="search" size={16} /> Stage 1 — Jobs</span>
         </button>
         <button
           onClick={() => runStage('stage2')}
@@ -65,7 +66,7 @@ function TabRun({ config, status, apiUrl }) {
             opacity: status.state === 'running' ? 0.6 : 1,
           }}
         >
-          🤝 Stage 2 — Invites
+          <span className="button-with-icon"><Icon name="users" size={16} /> Stage 2 — Invites</span>
         </button>
         <button
           onClick={() => runStage('stage3')}
@@ -80,7 +81,7 @@ function TabRun({ config, status, apiUrl }) {
             opacity: status.state === 'running' ? 0.6 : 1,
           }}
         >
-          📇 Stage 3 — Emails
+          <span className="button-with-icon"><Icon name="mail" size={16} /> Stage 3 — Emails</span>
         </button>
         <button
           onClick={() => { runStage('stage1'); setTimeout(() => runStage('stage2'), 2000); }}
@@ -96,18 +97,18 @@ function TabRun({ config, status, apiUrl }) {
             fontWeight: 'bold',
           }}
         >
-          ⚡ Stages 1 → 2
+          <span className="button-with-icon"><Icon name="chevronsRight" size={16} /> Stages 1 → 2</span>
         </button>
       </div>
 
       {status.state === 'running' && (
-        <p style={{ marginTop: '20px', color: '#1976d2' }}>⏳ {status.message}</p>
+        <p className="inline-status" style={{ marginTop: '20px', color: '#1976d2' }}><Icon name="spinner" size={16} /> {status.message}</p>
       )}
       {status.state === 'done' && (
-        <p style={{ marginTop: '20px', color: '#388e3c' }}>✅ {status.message}</p>
+        <p className="inline-status" style={{ marginTop: '20px', color: '#388e3c' }}><Icon name="check" size={16} /> {status.message}</p>
       )}
       {status.state === 'error' && (
-        <p style={{ marginTop: '20px', color: '#d32f2f' }}>❌ {status.message}</p>
+        <p className="inline-status" style={{ marginTop: '20px', color: '#d32f2f' }}><Icon name="error" size={16} /> {status.message}</p>
       )}
     </div>
   );

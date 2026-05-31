@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Icon from './Icon';
 
 function TabSetup({ config, saveConfig }) {
   const prefs = config.jobPreferences || {};
@@ -23,7 +24,7 @@ function TabSetup({ config, saveConfig }) {
 
   return (
     <div>
-      <h2>⚙️ Setup</h2>
+      <h2 className="heading-with-icon"><Icon name="settings" /> Setup</h2>
       
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
         <div>
@@ -80,7 +81,7 @@ function TabSetup({ config, saveConfig }) {
       </div>
 
       <button onClick={save} style={{ marginTop: '20px', padding: '10px 20px', background: '#667eea', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-        💾 Save
+        <span className="button-with-icon"><Icon name="check" size={16} /> Save</span>
       </button>
     </div>
   );

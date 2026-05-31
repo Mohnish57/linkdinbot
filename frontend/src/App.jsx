@@ -10,6 +10,7 @@ import TabRun from './components/TabRun';
 import TabPosts from './components/TabPosts';
 import TabResults from './components/TabResults';
 import TabEmail from './components/TabEmail';
+import Icon from './components/Icon';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -62,14 +63,14 @@ function App() {
   }
 
   const tabs = [
-    { id: 'setup', label: '⚙️ Setup', component: TabSetup },
-    { id: 'candidate', label: '🪪 Candidate', component: TabCandidate },
-    { id: 'notes', label: '💬 Notes', component: TabNotes },
-    { id: 'ai', label: '🧠 AI', component: TabAI },
-    { id: 'run', label: '▶️ Run', component: TabRun },
-    { id: 'posts', label: '📰 Posts', component: TabPosts },
-    { id: 'results', label: '📊 Results', component: TabResults },
-    { id: 'email', label: '📨 Email', component: TabEmail },
+    { id: 'setup', label: 'Setup', icon: 'settings', component: TabSetup },
+    { id: 'candidate', label: 'Candidate', icon: 'user', component: TabCandidate },
+    { id: 'notes', label: 'Notes', icon: 'message', component: TabNotes },
+    { id: 'ai', label: 'AI', icon: 'ai', component: TabAI },
+    { id: 'run', label: 'Run', icon: 'play', component: TabRun },
+    { id: 'posts', label: 'Posts', icon: 'document', component: TabPosts },
+    { id: 'results', label: 'Results', icon: 'table', component: TabResults },
+    { id: 'email', label: 'Email', icon: 'mail', component: TabEmail },
   ];
 
   const TabComponent = tabs.find(t => t.id === activeTab)?.component || TabSetup;
@@ -77,7 +78,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🤖 LinkedIn Referral Bot</h1>
+        <h1><Icon name="briefcase" size={34} /> LinkedIn Referral Bot</h1>
         <p>Hirer → recruiters → emails. Resume routing + invite notes.</p>
       </header>
 
@@ -92,6 +93,7 @@ function App() {
                 className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
                 onClick={() => setActiveTab(tab.id)}
               >
+                <Icon name={tab.icon} size={16} />
                 {tab.label}
               </button>
             ))}
@@ -99,17 +101,17 @@ function App() {
 
           {status.state === 'running' && (
             <div className="status running">
-              ⏳ {status.message}
+              <Icon name="spinner" size={16} /> {status.message}
             </div>
           )}
           {status.state === 'done' && (
             <div className="status success">
-              ✅ {status.message}
+              <Icon name="check" size={16} /> {status.message}
             </div>
           )}
           {status.state === 'error' && (
             <div className="status error">
-              ❌ {status.message}
+              <Icon name="error" size={16} /> {status.message}
             </div>
           )}
 
