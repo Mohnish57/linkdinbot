@@ -55,6 +55,10 @@ settings:
     Thanks!
     {candidate_name}
     {candidate_email}
+  # Post-search configuration: keywords to search in LinkedIn posts and per-keyword limit
+  postSearch:
+    keywords: []
+    maxPostsPerKeyword: 20
 jobPreferences:
   jobTypes:
     full-time: true

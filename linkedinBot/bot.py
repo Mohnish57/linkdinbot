@@ -43,12 +43,14 @@ from linkedinBot.utils.ai import (
     DEFAULT_AI_SYSTEM_PROMPT_TEMPLATE,
 )
 from linkedinBot.utils.shortlink import shorten as shorten_url
+from linkedinBot.utils.mailer import GmailCreds, send_one, gmail_creds_from_env
 
 
 # Cross-platform paths anchored at the project root (the linkdinbot/ folder).
 PROJECT_ROOT = os.path.dirname(current_file_path)
 CONFIG_PATH = os.path.join(current_file_path, "configs", "config.yaml")
 OUTPUT_DIR = os.path.join(current_file_path, "output")
+POSTS_CSV = os.path.join(OUTPUT_DIR, "posts_emails.csv")
 JOBS_CSV = os.path.join(OUTPUT_DIR, "jobs.csv")
 CHROME_PROFILE_DIR = os.path.join(current_file_path, "chrome-profile")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -1077,6 +1079,161 @@ class LinkedInBot:
                 continue
 
         print(f"Stage 3 done. Total emails on file: {df['email'].notna().sum()}")
+
+    # ------------------------------------------------------- post search + emails
+    def search_recent_posts(self, keywords: list[str] | None = None, max_per_keyword: int | None = None):
+        """Search LinkedIn content (posts) for `keywords` and collect emails found in post text or profile snippets.
+
+        Writes results to `posts_emails.csv` with columns:
+          keyword, post_link, profile_name, profile_link, post_text, email, email_sent
+        """
+        keywords = list(keywords or self.config.get("postSearch", {}).get("keywords", []))
+        if not keywords:
+            print("No post-search keywords configured.")
+            return
+        max_per_keyword = max_per_keyword or self.config.get("postSearch", {}).get("maxPostsPerKeyword", 20)
+
+        rows = []
+        print(f"Searching posts for keywords: {keywords}")
+        for kw in keywords:
+            try:
+                q = quote_plus(kw)
+                url = f"https://www.linkedin.com/search/results/content/?keywords={q}&origin=GLOBAL_SEARCH_HEADER"
+                self.driver.get(url)
+                time.sleep(random.uniform(2.5, 4.5))
+                # try scrolling and collecting post tiles
+                collected = 0
+                seen_links = set()
+                for _ in range(6):
+                    # try multiple common selectors for LinkedIn posts
+                    candidates = []
+                    for sel in ("div.feed-shared-update-v2", "div.occludable-update", "div.search-result__wrapper"):
+                        try:
+                            candidates.extend(self.driver.find_elements(By.CSS_SELECTOR, sel))
+                        except Exception:
+                            continue
+                    for post in candidates:
+                        if collected >= max_per_keyword:
+                            break
+                        try:
+                            post_text = (post.text or "").strip()
+                            # post link — try anchors that look like posts
+                            post_link = None
+                            try:
+                                a = post.find_element(By.CSS_SELECTOR, "a[href*='/posts/'], a[href*='/feed/update/']")
+                                post_link = a.get_attribute("href")
+                            except Exception:
+                                pass
+                            # profile info
+                            profile_name = None
+                            profile_link = None
+                            try:
+                                actor = post.find_element(By.CSS_SELECTOR, "a.feed-shared-actor__container-link, a.feed-shared-actor__name")
+                                profile_link = actor.get_attribute("href")
+                                profile_name = actor.text.strip()
+                            except Exception:
+                                pass
+
+                            email = self._extract_email_from_text(post_text)
+                            # also check visible snippet for emails
+                            if not email and profile_name:
+                                email = self._extract_email_from_text(profile_name)
+
+                            if post_link and post_link in seen_links:
+                                continue
+                            seen_links.add(post_link or f"{kw}-{collected}")
+
+                            rows.append({
+                                "keyword": kw,
+                                "post_link": post_link,
+                                "profile_name": profile_name,
+                                "profile_link": profile_link,
+                                "post_text": post_text,
+                                "email": email,
+                                "email_sent": False,
+                            })
+                            collected += 1
+                        except Exception:
+                            continue
+                    if collected >= max_per_keyword:
+                        break
+                    self.scroll_down_page(30)
+                    time.sleep(random.uniform(1.2, 2.2))
+                print(f"  • {kw}: collected {collected} posts")
+            except Exception as e:
+                print(f"Search failed for '{kw}': {e}")
+                continue
+
+        # save CSV
+        import pandas as pd
+
+        df = pd.DataFrame(rows)
+        if os.path.exists(POSTS_CSV):
+            prev = pd.read_csv(POSTS_CSV)
+            df = pd.concat([prev, df], ignore_index=True)
+        df.to_csv(POSTS_CSV, index=False)
+        print(f"Saved {len(df)} post records to {POSTS_CSV}")
+
+    def send_emails_for_posts(self, subject_template: str | None = None, body_template: str | None = None, dry_run: bool = False, only_unsent: bool = True):
+        """Send emails to addresses found in `posts_emails.csv` using Gmail creds from env.
+
+        Marks `email_sent=True` in the CSV when successful.
+        """
+        if not os.path.exists(POSTS_CSV):
+            print("No posts_emails.csv found — run post search first.")
+            return
+        import pandas as pd
+
+        df = pd.read_csv(POSTS_CSV)
+        if "email_sent" not in df.columns:
+            df["email_sent"] = False
+        candidates = df[df["email"].astype(str).str.contains("@", na=False)]
+        if only_unsent:
+            candidates = candidates[~candidates["email_sent"].astype(bool)]
+
+        creds = gmail_creds_from_env()
+        if not creds:
+            print("No Gmail creds found in environment (GMAIL_USER / GMAIL_APP_PASSWORD). Aborting.")
+            return
+
+        sent = 0
+        for idx, row in candidates.iterrows():
+            to_addr = (row.get("email") or "").strip()
+            if not to_addr or "@" not in to_addr:
+                continue
+            fields = {
+                "name": (row.get("profile_name") or "there").split()[0],
+                **{
+                    "candidate_name": self.config.get("candidateName"),
+                    "candidate_first_name": self.config.get("candidateFirstName"),
+                    "candidate_email": self.config.get("candidateEmail"),
+                    "candidate_bio_long": self.config.get("candidateBioFullstack") or "",
+                },
+            }
+            subject = (subject_template or self.config.get("emailSubjectTemplate") or "Hello")
+            body = (body_template or self.config.get("emailBodyTemplate") or "")
+            try:
+                rendered_subject = subject.format(**fields)
+                rendered_body = body.format(**fields)
+            except Exception:
+                rendered_subject, rendered_body = subject, body
+
+            if dry_run:
+                print(f"[dry-run] Would send to {to_addr}: {rendered_subject}")
+                sent += 1
+                df.at[idx, "email_sent"] = True
+                continue
+
+            try:
+                send_one(creds=creds, to_addr=to_addr, subject=rendered_subject, body=rendered_body, from_name=self.config.get("candidateName"))
+                df.at[idx, "email_sent"] = True
+                sent += 1
+                df.to_csv(POSTS_CSV, index=False)
+                print(f"Sent email to {to_addr}")
+            except Exception as e:
+                print(f"Failed to send to {to_addr}: {e}")
+
+        print(f"Email send complete. Sent: {sent}")
 
     def _read_contact_info_email(self):
         """On the currently-loaded profile, open the Contact Info overlay

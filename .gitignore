@@ -9,12 +9,20 @@ __pycache__/
 .venv/
 venv/
 ENV/
+backend/venv/
+
+# Node / React
+node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
 
 # Environment files
 .env
 .env.*
 
-# Streamlit / local app artifacts
+# Bot artifacts
 linkedinBot/chrome-profile/
 linkedinBot/output/
 linkedinBot/uploads/
@@ -28,3 +36,4 @@ linkedinBot/.git
 
 run.ipynb
 resume_*.pdf
+.vercel

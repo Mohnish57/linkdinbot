@@ -206,12 +206,13 @@ with st.sidebar:
 
 
 # ================================================================ tabs
-tab_setup, tab_candidate, tab_notes, tab_ai, tab_run, tab_results, tab_email = st.tabs([
+tab_setup, tab_candidate, tab_notes, tab_ai, tab_run, tab_posts, tab_results, tab_email = st.tabs([
     "⚙️ Setup",
     "🪪 Candidate",
     "💬 Invite Notes",
     "🧠 AI Prompt",
     "▶️ Run",
+    "📰 Posts",
     "📊 Results",
     "📨 Email recruiters",
 ])
@@ -559,6 +560,99 @@ with tab_results:
             if p.exists():
                 p.unlink()
         st.success("Cleared. Refresh to update.")
+
+
+# ---------------------------------------------------------------- Posts
+with tab_posts:
+    st.subheader("Search recent LinkedIn posts & outreach")
+    st.caption("Search public LinkedIn posts by keyword, collect emails found, and optionally send outreach.")
+
+    cfg_posts = settings.get("postSearch", {})
+    kw_default = ",".join(cfg_posts.get("keywords", []))
+    kw_text = st.text_area("Keywords (comma-separated)", value=kw_default, height=80)
+    max_per = st.number_input("Max posts per keyword", 1, 500, cfg_posts.get("maxPostsPerKeyword", 20))
+
+    c1, c2 = st.columns(2)
+    if c1.button("🔎 Search posts"):
+        # persist settings + creds like Run tab
+        os.environ["LINKEDIN_EMAIL"] = linkedin_email or ""
+        os.environ["LINKEDIN_PASSWORD"] = linkedin_password or ""
+        if gmail_user:
+            os.environ["GMAIL_USER"] = gmail_user
+        if gmail_app_password:
+            os.environ["GMAIL_APP_PASSWORD"] = gmail_app_password
+
+        # save config
+        settings.setdefault("postSearch", {})
+        settings["postSearch"]["keywords"] = [k.strip() for k in kw_text.split(",") if k.strip()]
+        settings["postSearch"]["maxPostsPerKeyword"] = int(max_per)
+        save_yaml(cfg)
+
+        from linkedinBot.bot import LinkedInBot
+
+        resume_paths = {k: v for k, v in {
+            "fullstack": st.session_state.get("resume_path_fullstack"),
+            "frontend": st.session_state.get("resume_path_frontend"),
+        }.items() if v}
+
+        def _search():
+            bot = LinkedInBot(headless=headless, resume_paths=resume_paths)
+            try:
+                bot.login()
+                bot.search_recent_posts(keywords=settings["postSearch"]["keywords"], max_per_keyword=int(max_per))
+            finally:
+                bot.close()
+
+        run_in_thread(_search)
+
+    posts_csv_path = OUTPUT_DIR / "posts_emails.csv"
+    df_posts = safe_read_csv(posts_csv_path)
+    st.markdown("### Collected posts & emails")
+    if df_posts.empty:
+        st.info("No posts collected yet — run a search.")
+    else:
+        st.dataframe(df_posts, use_container_width=True, height=300)
+        st.download_button("⬇️ Download CSV", data=df_posts.to_csv(index=False), file_name="posts_emails.csv")
+
+    st.divider()
+    st.subheader("Send outreach to discovered emails")
+    subj_p = st.text_input("Email subject template", value=settings.get("emailSubjectTemplate") or DEFAULT_EMAIL_SUBJECT_TEMPLATE)
+    body_p = st.text_area("Email body template", value=settings.get("emailBodyTemplate") or DEFAULT_EMAIL_BODY_TEMPLATE, height=220)
+    dry_run_posts = st.checkbox("Dry run (don't actually send)", value=True)
+
+    sp, ss = st.columns(2)
+    if sp.button("👀 Dry run (preview) for posts"):
+        os.environ["GMAIL_USER"] = gmail_user or ""
+        os.environ["GMAIL_APP_PASSWORD"] = gmail_app_password or ""
+
+        from linkedinBot.bot import LinkedInBot
+
+        def _dry():
+            bot = LinkedInBot(headless=headless, resume_paths={})
+            try:
+                bot.send_emails_for_posts(subject_template=subj_p, body_template=body_p, dry_run=True, only_unsent=True)
+            finally:
+                bot.close()
+
+        run_in_thread(_dry)
+
+    if ss.button("📨 Send emails NOW (posts)"):
+        if not (gmail_user and gmail_app_password):
+            st.error("Gmail credentials missing — open the Gmail expander in the sidebar.")
+        else:
+            os.environ["GMAIL_USER"] = gmail_user
+            os.environ["GMAIL_APP_PASSWORD"] = gmail_app_password
+
+            from linkedinBot.bot import LinkedInBot
+
+            def _send():
+                bot = LinkedInBot(headless=headless, resume_paths={})
+                try:
+                    bot.send_emails_for_posts(subject_template=subj_p, body_template=body_p, dry_run=False, only_unsent=True)
+                finally:
+                    bot.close()
+
+            run_in_thread(_send)
 
 
 # ---------------------------------------------------------------- Email tab

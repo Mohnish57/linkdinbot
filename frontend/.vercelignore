@@ -1,0 +1,10 @@
+backend/
+linkedinBot/
+node_modules/
+.git/
+.gitignore
+README.md
+SETUP.md
+Procfile
+.env.example
+*.pdf
