@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import './App.css';
 import Sidebar from './components/Sidebar';
 import TabSetup from './components/TabSetup';
@@ -77,6 +79,7 @@ function App() {
 
   return (
     <div className="app">
+      <ToastContainer position="top-right" autoClose={3500} newestOnTop theme="colored" />
       <header className="header">
         <h1><Icon name="briefcase" size={34} /> LinkedIn Referral Bot</h1>
         <p>Hirer → recruiters → emails. Resume routing + invite notes.</p>

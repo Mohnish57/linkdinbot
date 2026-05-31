@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 import Icon from './Icon';
 
 function TabSetup({ config, saveConfig, apiUrl }) {
@@ -30,7 +31,7 @@ function TabSetup({ config, saveConfig, apiUrl }) {
     if (!file) return;
 
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      alert('Please upload a PDF resume.');
+      toast.warn('Please upload a PDF resume.');
       return;
     }
 
@@ -44,8 +45,9 @@ function TabSetup({ config, saveConfig, apiUrl }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setResume(res.data.resumes?.fullstack || res.data.resume || null);
+      toast.success('Resume uploaded.');
     } catch (err) {
-      alert(`Failed to upload resume: ${err.response?.data?.error || err.message}`);
+      toast.error(`Failed to upload resume: ${err.response?.data?.error || err.message}`);
     } finally {
       setUploading(false);
     }
@@ -53,7 +55,7 @@ function TabSetup({ config, saveConfig, apiUrl }) {
 
   const shortenDriveLink = async () => {
     if (!driveLink.trim()) {
-      alert('Enter a Drive link first.');
+      toast.warn('Enter a Drive link first.');
       return;
     }
 
@@ -61,8 +63,9 @@ function TabSetup({ config, saveConfig, apiUrl }) {
       setShortening(true);
       const res = await axios.post(`${apiUrl}/api/shorten-url`, { url: driveLink.trim() });
       setDriveLink(res.data.url);
+      toast.success('Link shortened.');
     } catch (err) {
-      alert(`TinyURL shortening failed: ${err.response?.data?.error || err.message}`);
+      toast.error(`TinyURL shortening failed: ${err.response?.data?.error || err.message}`);
     } finally {
       setShortening(false);
     }
@@ -80,7 +83,7 @@ function TabSetup({ config, saveConfig, apiUrl }) {
         recruiterKeywords: recruiterKeywords.split('\n').map(k => k.trim()).filter(Boolean),
       },
     });
-    alert('Saved!');
+    toast.success('Setup saved!');
   };
 
   return (

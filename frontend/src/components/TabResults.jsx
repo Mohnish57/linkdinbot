@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 import Icon from './Icon';
 
 function TabResults({ apiUrl }) {
@@ -31,9 +32,9 @@ function TabResults({ apiUrl }) {
         await axios.post(`${apiUrl}/api/results/clear`);
         setJobs([]);
         setConnections([]);
-        alert('Cleared!');
+        toast.success('Cleared!');
       } catch (err) {
-        alert(`Failed to clear: ${err.message}`);
+        toast.error(`Failed to clear: ${err.message}`);
       }
     }
   };

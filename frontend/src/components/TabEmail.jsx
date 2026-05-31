@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-toastify';
 import Icon from './Icon';
 
 function TabEmail({ config, status, apiUrl }) {
@@ -7,7 +8,7 @@ function TabEmail({ config, status, apiUrl }) {
   const [bodyTemplate, setBodyTemplate] = useState(settings.emailBodyTemplate || '');
 
   const send = (dryRun) => {
-    alert(`${dryRun ? 'Dry run preview' : 'Send'} — coming soon. Use the Posts tab for email functionality.`);
+    toast.info(`${dryRun ? 'Dry run preview' : 'Send'} — coming soon. Use the Posts tab for email functionality.`);
   };
 
   return (

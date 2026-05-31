@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 import Icon from './Icon';
 
 function TabRun({ status, apiUrl }) {
@@ -32,8 +33,9 @@ function TabRun({ status, apiUrl }) {
         resume_frontend: resumes.frontend?.path,
       };
       await axios.post(`${apiUrl}/api/bot/${stage}`, creds);
+      toast.info(`${stage} started.`);
     } catch (err) {
-      alert(`Failed to start ${stage}: ${err.message}`);
+      toast.error(`Failed to start ${stage}: ${err.message}`);
     }
   };
 

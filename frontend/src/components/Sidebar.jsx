@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-toastify';
 import './Sidebar.css';
 import Icon from './Icon';
 
@@ -15,7 +16,7 @@ function Sidebar() {
     localStorage.setItem('gemini_key', geminiKey);
     localStorage.setItem('gmail_user', gmailUser);
     localStorage.setItem('gmail_password', gmailPassword);
-    alert('Credentials saved locally (browser storage)');
+    toast.success('Credentials saved locally (browser storage)');
   };
 
   return (

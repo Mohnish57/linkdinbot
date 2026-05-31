@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-toastify';
 import Icon from './Icon';
 
 const DEFAULT_INVITE_NOTE = `Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
@@ -18,7 +19,7 @@ function TabNotes({ config, saveConfig }) {
         sendInviteNote: true,
       },
     });
-    alert('Invite note saved!');
+    toast.success('Invite note saved!');
   };
 
   return (

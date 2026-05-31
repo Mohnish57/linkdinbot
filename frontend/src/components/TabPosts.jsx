@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 import Icon from './Icon';
 
 function TabPosts({ config, saveConfig, status, apiUrl }) {
@@ -47,9 +48,10 @@ function TabPosts({ config, saveConfig, status, apiUrl }) {
         linkedin_password: localStorage.getItem('linkedin_password'),
       };
       await axios.post(`${apiUrl}/api/bot/search-posts`, creds);
+      toast.info('Post search started — results will refresh shortly.');
       setTimeout(fetchPosts, 3000); // Refresh after 3 seconds
     } catch (err) {
-      alert(`Failed to search posts: ${err.message}`);
+      toast.error(`Failed to search posts: ${err.message}`);
     }
   };
 
@@ -64,11 +66,12 @@ function TabPosts({ config, saveConfig, status, apiUrl }) {
         gmail_app_password: localStorage.getItem('gmail_password'),
       };
       await axios.post(`${apiUrl}/api/bot/send-emails-posts`, creds);
+      toast.info(dryRunMode ? 'Dry run started.' : 'Sending emails — results will refresh shortly.');
       if (!dryRunMode) {
         setTimeout(fetchPosts, 3000); // Refresh after 3 seconds
       }
     } catch (err) {
-      alert(`Failed to send emails: ${err.message}`);
+      toast.error(`Failed to send emails: ${err.message}`);
     }
   };
 
