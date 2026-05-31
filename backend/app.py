@@ -14,6 +14,7 @@ from pathlib import Path
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 import yaml
 import pandas as pd
 
@@ -29,6 +30,8 @@ CORS(app)  # Allow React frontend to call these APIs
 CONFIG_PATH = PROJECT_ROOT / "linkedinBot" / "configs" / "config.yaml"
 OUTPUT_DIR = PROJECT_ROOT / "linkedinBot" / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = PROJECT_ROOT / "linkedinBot" / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # In-memory bot status
 bot_status = {"state": "idle", "message": "", "progress": ""}
@@ -47,6 +50,19 @@ def set_status(state: str, message: str = "", progress: str = ""):
     global bot_status
     bot_status = {"state": state, "message": message, "progress": progress, "timestamp": datetime.now().isoformat()}
 
+def resume_payload():
+    resumes = {}
+    for role in ("fullstack", "frontend"):
+        matches = sorted(UPLOAD_DIR.glob(f"{role}_*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if matches:
+            latest = matches[0]
+            resumes[role] = {
+                "name": latest.name,
+                "path": str(latest),
+                "uploaded_at": datetime.fromtimestamp(latest.stat().st_mtime).isoformat(),
+            }
+    return resumes
+
 # ============================================================ Config endpoints
 @app.route("/api/config", methods=["GET"])
 def get_config():
@@ -62,6 +78,40 @@ def update_config():
     cfg.update(data)
     save_config(cfg)
     return jsonify({"ok": True, "config": cfg})
+
+# ============================================================ Resume uploads
+@app.route("/api/resumes", methods=["GET"])
+def get_resumes():
+    """Return the latest uploaded resume for each supported role."""
+    return jsonify({"resumes": resume_payload()})
+
+@app.route("/api/resumes/upload", methods=["POST"])
+def upload_resume():
+    """Upload a PDF resume and return the saved server path."""
+    role = request.form.get("role", "fullstack")
+    if role not in {"fullstack", "frontend"}:
+        return jsonify({"ok": False, "error": "role must be fullstack or frontend"}), 400
+
+    file = request.files.get("resume")
+    if not file or not file.filename:
+        return jsonify({"ok": False, "error": "resume file is required"}), 400
+
+    filename = secure_filename(file.filename)
+    if not filename.lower().endswith(".pdf"):
+        return jsonify({"ok": False, "error": "only PDF resumes are supported"}), 400
+
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    save_path = UPLOAD_DIR / f"{role}_{timestamp}_{filename}"
+    file.save(save_path)
+    return jsonify({
+        "ok": True,
+        "resume": {
+            "name": save_path.name,
+            "path": str(save_path),
+            "uploaded_at": datetime.fromtimestamp(save_path.stat().st_mtime).isoformat(),
+        },
+        "resumes": resume_payload(),
+    })
 
 # ============================================================ Bot status
 @app.route("/api/status", methods=["GET"])
