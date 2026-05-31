@@ -1,0 +1,27 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment files
+.env
+.env.*
+
+# Streamlit / local app artifacts
+linkedinBot/chrome-profile/
+linkedinBot/output/
+linkedinBot/uploads/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git metadata for nested repos
+linkedinBot/.git
