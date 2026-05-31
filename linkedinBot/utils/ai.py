@@ -305,6 +305,7 @@ def build_invite_note(
         company=company,
         job_link=job_link,
         resume_link=resume_link,
+        drive_link=resume_link,
         candidate_first_name=candidate_first_name,
         candidate_bio=candidate_bio,
     )

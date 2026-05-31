@@ -1083,7 +1083,7 @@ class LinkedInBot:
         print(f"Stage 3 done. Total emails on file: {df['email'].notna().sum()}")
 
     # ------------------------------------------------------- post search + emails
-    def search_recent_posts(self, keywords: list[str] | None = None, max_per_keyword: int | None = None):
+    def search_recent_posts(self, keywords: list[str] | None = None, max_per_keyword: int | None = None, recent_24_hours: bool = True):
         """Search LinkedIn content (posts) for `keywords` and collect emails found in post text or profile snippets.
 
         Writes results to `posts_emails.csv` with columns:
@@ -1094,6 +1094,7 @@ class LinkedInBot:
             print("No post-search keywords configured.")
             return
         max_per_keyword = max_per_keyword or self.config.get("postSearch", {}).get("maxPostsPerKeyword", 20)
+        max_per_keyword = min(max(int(max_per_keyword), 20), 50)
 
         rows = []
         print(f"Searching posts for keywords: {keywords}")
@@ -1101,6 +1102,8 @@ class LinkedInBot:
             try:
                 q = quote_plus(kw)
                 url = f"https://www.linkedin.com/search/results/content/?keywords={q}&origin=GLOBAL_SEARCH_HEADER"
+                if recent_24_hours:
+                    url += "&datePosted=%22past-24h%22"
                 self.driver.get(url)
                 time.sleep(random.uniform(2.5, 4.5))
                 # try scrolling and collecting post tiles

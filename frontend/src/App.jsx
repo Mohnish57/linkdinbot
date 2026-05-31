@@ -3,9 +3,7 @@ import axios from 'axios';
 import './App.css';
 import Sidebar from './components/Sidebar';
 import TabSetup from './components/TabSetup';
-import TabCandidate from './components/TabCandidate';
 import TabNotes from './components/TabNotes';
-import TabAI from './components/TabAI';
 import TabRun from './components/TabRun';
 import TabPosts from './components/TabPosts';
 import TabResults from './components/TabResults';
@@ -64,9 +62,7 @@ function App() {
 
   const tabs = [
     { id: 'setup', label: 'Setup', icon: 'settings', component: TabSetup },
-    { id: 'candidate', label: 'Candidate', icon: 'user', component: TabCandidate },
     { id: 'notes', label: 'Notes', icon: 'message', component: TabNotes },
-    { id: 'ai', label: 'AI', icon: 'ai', component: TabAI },
     { id: 'run', label: 'Run', icon: 'play', component: TabRun },
     { id: 'posts', label: 'Posts', icon: 'document', component: TabPosts },
     { id: 'results', label: 'Results', icon: 'table', component: TabResults },

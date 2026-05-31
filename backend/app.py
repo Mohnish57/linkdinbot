@@ -9,6 +9,8 @@ import os
 import sys
 import json
 import threading
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -46,6 +48,14 @@ def save_config(cfg: dict):
     with CONFIG_PATH.open("w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
 
+def deep_merge(base: dict, updates: dict):
+    for key, value in (updates or {}).items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
 def set_status(state: str, message: str = "", progress: str = ""):
     global bot_status
     bot_status = {"state": state, "message": message, "progress": progress, "timestamp": datetime.now().isoformat()}
@@ -75,9 +85,27 @@ def update_config():
     """Update config (settings, jobPreferences, candidate, etc)."""
     data = request.json
     cfg = load_config()
-    cfg.update(data)
+    deep_merge(cfg, data)
     save_config(cfg)
     return jsonify({"ok": True, "config": cfg})
+
+@app.route("/api/shorten-url", methods=["POST"])
+def shorten_url():
+    """Shorten a URL with TinyURL."""
+    data = request.json or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "url is required"}), 400
+
+    try:
+        tiny_url = "https://tinyurl.com/api-create.php?" + urllib.parse.urlencode({"url": url})
+        with urllib.request.urlopen(tiny_url, timeout=10) as response:
+            short_url = response.read().decode("utf-8").strip()
+        if not short_url.startswith("http"):
+            raise ValueError(short_url or "TinyURL returned an invalid response")
+        return jsonify({"ok": True, "url": short_url})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "url": url}), 502
 
 # ============================================================ Resume uploads
 @app.route("/api/resumes", methods=["GET"])
@@ -133,11 +161,17 @@ def run_bot_action(action_name: str, **kwargs):
                 resume_paths["fullstack"] = kwargs["resume_fullstack"]
             if kwargs.get("resume_frontend"):
                 resume_paths["frontend"] = kwargs["resume_frontend"]
+
+            config_overrides = dict(kwargs.get("config_overrides", {}) or {})
+            if kwargs.get("linkedin_email"):
+                config_overrides["email"] = kwargs["linkedin_email"]
+            if kwargs.get("linkedin_password"):
+                config_overrides["password"] = kwargs["linkedin_password"]
             
             bot = LinkedInBot(
                 headless=kwargs.get("headless", False),
                 resume_paths=resume_paths if resume_paths else None,
-                config_overrides=kwargs.get("config_overrides", {})
+                config_overrides=config_overrides
             )
             
             try:
@@ -156,7 +190,11 @@ def run_bot_action(action_name: str, **kwargs):
                     set_status("running", "Searching posts...")
                     kw = kwargs.get("keywords", [])
                     max_per = kwargs.get("max_per_keyword", 20)
-                    bot.search_recent_posts(keywords=kw, max_per_keyword=max_per)
+                    bot.search_recent_posts(
+                        keywords=kw,
+                        max_per_keyword=max_per,
+                        recent_24_hours=kwargs.get("recent_24_hours", True),
+                    )
                 elif action_name == "send_emails_posts":
                     set_status("running", "Sending emails to post contacts...")
                     bot.send_emails_for_posts(
@@ -202,7 +240,10 @@ def bot_search_posts():
     data = request.json or {}
     kw = data.get("keywords", [])
     max_per = data.get("max_per_keyword", 20)
-    run_bot_action("search_posts", keywords=kw, max_per_keyword=max_per, **data)
+    payload = dict(data)
+    payload.pop("keywords", None)
+    payload.pop("max_per_keyword", None)
+    run_bot_action("search_posts", keywords=kw, max_per_keyword=max_per, **payload)
     return jsonify({"ok": True, "status": "started"})
 
 @app.route("/api/bot/send-emails-posts", methods=["POST"])

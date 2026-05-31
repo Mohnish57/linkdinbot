@@ -40,6 +40,9 @@ from linkedinBot.utils.ai import (
 from linkedinBot.utils.shortlink import shorten as shorten_url
 from linkedinBot.utils.mailer import GmailCreds, send_to_recruiters
 
+DEFAULT_SINGLE_INVITE_NOTE = """Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
+I'd love to connect. Resume: {drive_link}"""
+
 CONFIG_PATH = PROJECT_ROOT / "linkedinBot" / "configs" / "config.yaml"
 OUTPUT_DIR = PROJECT_ROOT / "linkedinBot" / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -96,35 +99,24 @@ def run_in_thread(target, *args, **kwargs):
 
 
 # ---------------------------------------------------------------- page
-st.set_page_config(page_title="LinkedIn Referral Bot", page_icon="🤖", layout="wide")
-st.title("🤖 LinkedIn Referral Bot")
+st.set_page_config(page_title="LinkedIn Referral Bot", layout="wide")
+st.title("LinkedIn Referral Bot")
 st.caption("Hirer → recruiters → emails. Resume routing (fullstack vs frontend) + invite notes.")
 
 cfg = load_yaml()
 settings = cfg.setdefault("settings", {})
 prefs = cfg.setdefault("jobPreferences", {})
 candidate = cfg.setdefault("candidate", {})
+your_name = candidate.get("name", DEFAULT_CANDIDATE_NAME)
+your_first_name = candidate.get("first_name", DEFAULT_CANDIDATE_FIRST_NAME)
+your_email = candidate.get("email", DEFAULT_CANDIDATE_EMAIL)
 
 
 # =============================================================== sidebar
 with st.sidebar:
-    st.header("👤 You")
-    your_name = st.text_input(
-        "Your full name", value=candidate.get("name", DEFAULT_CANDIDATE_NAME)
-    )
-    your_first_name = st.text_input(
-        "First name (used in invite notes)",
-        value=candidate.get("first_name", DEFAULT_CANDIDATE_FIRST_NAME),
-    )
-    your_email = st.text_input(
-        "Your contact email (FROM address for emails)",
-        value=candidate.get("email", DEFAULT_CANDIDATE_EMAIL),
-    )
-
-    st.divider()
-    st.header("🔑 LinkedIn login")
+    st.header("LinkedIn login")
     linkedin_email = st.text_input(
-        "LinkedIn email",
+        "LinkedIn ID or email",
         value=os.environ.get("LINKEDIN_EMAIL", candidate.get("email", "")),
     )
     linkedin_password = st.text_input(
@@ -134,7 +126,7 @@ with st.sidebar:
     )
 
     st.divider()
-    st.header("🤖 Gemini")
+    st.header("Gemini")
     gemini_key = st.text_input(
         "Gemini API key",
         type="password",
@@ -142,7 +134,7 @@ with st.sidebar:
     )
 
     st.divider()
-    with st.expander("📨 Gmail (for sending emails to recruiters)"):
+    with st.expander("Gmail (for sending emails to recruiters)"):
         st.caption(
             "Create an App Password at "
             "Required only when you click 'Send emails' in the Email tab."
@@ -155,8 +147,8 @@ with st.sidebar:
         )
 
     st.divider()
-    st.header("📄 Resumes")
-    uploaded_fs = st.file_uploader("Full Stack resume PDF", type=["pdf"], key="resume_fs")
+    st.header("Resume")
+    uploaded_fs = st.file_uploader("Resume PDF", type=["pdf"], key="resume_fs")
     if uploaded_fs:
         p = UPLOAD_DIR / "resume_fullstack.pdf"
         p.write_bytes(uploaded_fs.getvalue())
@@ -168,52 +160,31 @@ with st.sidebar:
             st.session_state.setdefault("resume_path_fullstack", str(default))
             st.caption(f"Default: `{default.name}`")
 
-    uploaded_fe = st.file_uploader("Frontend resume PDF", type=["pdf"], key="resume_fe")
-    if uploaded_fe:
-        p = UPLOAD_DIR / "resume_frontend.pdf"
-        p.write_bytes(uploaded_fe.getvalue())
-        st.session_state["resume_path_frontend"] = str(p)
-        st.success(f"Saved → {p.name}")
-    else:
-        default = PROJECT_ROOT / "resume_frontend.pdf"
-        if default.exists():
-            st.session_state.setdefault("resume_path_frontend", str(default))
-            st.caption(f"Default: `{default.name}`")
-
-    st.markdown("**Drive links** (auto-shortened for invite notes)")
+    st.markdown("**Drive link** (auto-shortened for invite notes)")
     resume_drive_link = st.text_input(
-        "Full Stack drive link",
+        "Drive resume link",
         value=settings.get("resumeDriveLink", DEFAULT_RESUME_DRIVE_LINK),
         key="dlink_fs",
     )
-    resume_drive_link_frontend = st.text_input(
-        "Frontend drive link",
-        value=settings.get(
-            "resumeDriveLinkFrontend", settings.get("resumeDriveLink", DEFAULT_RESUME_DRIVE_LINK)
-        ),
-        key="dlink_fe",
-    )
-    if st.button("🔗 Shorten both drive links via TinyURL"):
+    resume_drive_link_frontend = resume_drive_link
+    if st.button("Shorten drive link via TinyURL"):
         with st.spinner("Shortening…"):
             s1 = shorten_url(resume_drive_link) if resume_drive_link else ""
-            s2 = shorten_url(resume_drive_link_frontend) if resume_drive_link_frontend else ""
         settings["resumeDriveLink"] = s1 or resume_drive_link
-        settings["resumeDriveLinkFrontend"] = s2 or resume_drive_link_frontend
+        settings["resumeDriveLinkFrontend"] = settings["resumeDriveLink"]
         save_yaml(cfg)
-        st.success(f"Full Stack: {settings['resumeDriveLink']}\nFrontend: {settings['resumeDriveLinkFrontend']}")
+        st.success(settings["resumeDriveLink"])
         st.rerun()
 
 
 # ================================================================ tabs
-tab_setup, tab_candidate, tab_notes, tab_ai, tab_run, tab_posts, tab_results, tab_email = st.tabs([
-    "⚙️ Setup",
-    "🪪 Candidate",
-    "💬 Invite Notes",
-    "🧠 AI Prompt",
-    "▶️ Run",
-    "📰 Posts",
-    "📊 Results",
-    "📨 Email recruiters",
+tab_setup, tab_notes, tab_run, tab_posts, tab_results, tab_email = st.tabs([
+    "Setup",
+    "Invite Note",
+    "Run",
+    "Posts",
+    "Results",
+    "Email recruiters",
 ])
 
 # ---------------------------------------------------------------- Setup
@@ -226,21 +197,11 @@ with tab_setup:
             value="\n".join(prefs.get("positions", [])),
             height=180,
         ).strip().splitlines()
+    with col2:
         recruiter_keywords = st.text_area(
             "Recruiter headline keywords (one per line)",
             value="\n".join(prefs.get("recruiterKeywords", [])),
-            height=140,
-        ).strip().splitlines()
-    with col2:
-        people_profiles = st.text_area(
-            "People-search keywords inside each company (one per line)",
-            value="\n".join(prefs.get("people_profiles", [])),
             height=180,
-        ).strip().splitlines()
-        blacklisted_titles = st.text_area(
-            "Blacklisted job titles (one per line)",
-            value="\n".join(prefs.get("blacklistedTitles", [])),
-            height=140,
         ).strip().splitlines()
 
     st.subheader("Bot toggles")
@@ -261,7 +222,8 @@ with tab_setup:
     with s5:
         send_invite_note = st.checkbox(
             "Attach personalised note to each invite",
-            value=settings.get("sendInviteNote", True),
+            value=True,
+            disabled=True,
         )
     with s6:
         contact_hirer_first = st.checkbox(
@@ -269,62 +231,19 @@ with tab_setup:
             value=settings.get("contactHirerFirst", True),
         )
 
-    if st.button("💾 Save preferences", type="primary"):
+    if st.button("Save preferences", type="primary"):
         settings.update({
             "maxJobPage": int(max_job_page),
             "maxPeoplePerProfile": int(max_people),
             "recruitersOnly": bool(recruiters_only),
-            "sendInviteNote": bool(send_invite_note),
+            "sendInviteNote": True,
             "contactHirerFirst": bool(contact_hirer_first),
             "resumeDriveLink": resume_drive_link,
             "resumeDriveLinkFrontend": resume_drive_link_frontend,
         })
         prefs.update({
             "positions": [p for p in positions if p],
-            "people_profiles": [p for p in people_profiles if p],
             "recruiterKeywords": [k for k in recruiter_keywords if k],
-            "blacklistedTitles": [t for t in blacklisted_titles if t],
-        })
-        save_yaml(cfg)
-        st.success("Saved.")
-
-
-# ---------------------------------------------------------------- Candidate
-with tab_candidate:
-    st.subheader("Candidate profile (used in invite notes + AI prompt + emails)")
-    st.caption("Everything here is configurable — change once, reflected everywhere.")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        bio_fs = st.text_input(
-            "Short bio — Full Stack (≤ 60 chars, used in invite notes)",
-            value=candidate.get("bio_fullstack", DEFAULT_CANDIDATE_BIO_FULLSTACK),
-        )
-    with col_b:
-        bio_fe = st.text_input(
-            "Short bio — Frontend (≤ 60 chars)",
-            value=candidate.get("bio_frontend", DEFAULT_CANDIDATE_BIO_FRONTEND),
-        )
-
-    pitch = st.text_area(
-        "Long pitch (used in the post-connection follow-up DM Gemini generates)",
-        value=candidate.get("pitch", DEFAULT_CANDIDATE_PITCH),
-        height=110,
-    )
-    profile_block = st.text_area(
-        "AI profile block (full bullet list, used in the AI prompt)",
-        value=candidate.get("profile_block", DEFAULT_CANDIDATE_PROFILE_BLOCK),
-        height=220,
-    )
-
-    if st.button("💾 Save candidate profile"):
-        candidate.update({
-            "name": your_name,
-            "first_name": your_first_name,
-            "email": your_email,
-            "bio_fullstack": bio_fs,
-            "bio_frontend": bio_fe,
-            "pitch": pitch,
-            "profile_block": profile_block,
         })
         save_yaml(cfg)
         st.success("Saved.")
@@ -332,95 +251,35 @@ with tab_candidate:
 
 # ---------------------------------------------------------------- Notes
 with tab_notes:
-    st.subheader("Invite note templates")
-    st.caption(
-        f"Placeholders: `{{name}}`, `{{job_title}}`, `{{company}}`, `{{resume_link}}`, "
-        f"`{{candidate_first_name}}`, `{{candidate_bio}}`. "
-        f"LinkedIn cap: **{INVITE_NOTE_MAX}** chars. "
-        f"Bot picks Hirer template for the job-poster, otherwise Recruiter."
+    st.subheader("Invite note")
+    st.caption(f"Placeholders: `{{name}}`, `{{job_title}}`, `{{company}}`, `{{drive_link}}`. LinkedIn cap: **{INVITE_NOTE_MAX}** chars.")
+
+    tmpl_fs = st.text_area(
+        "Connection invite message",
+        value=settings.get("inviteNoteTemplate", DEFAULT_SINGLE_INVITE_NOTE),
+        height=150,
     )
+    p = build_invite_note(
+        template=tmpl_fs,
+        name="Priya Sharma",
+        job_title="Senior Full Stack Developer",
+        company="Acme Corp",
+        job_link="https://www.linkedin.com/jobs/view/4192384726/",
+        resume_link=resume_drive_link,
+        candidate_first_name=your_first_name,
+        candidate_bio=candidate.get("bio_fullstack", DEFAULT_CANDIDATE_BIO_FULLSTACK),
+    )
+    st.code(p, language="text")
+    st.caption(f"Length: {len(p)} / {INVITE_NOTE_MAX}")
 
-    def preview(template, variant, is_hirer):
-        return build_invite_note(
-            template=template,
-            name="Priya Sharma",
-            job_title="Senior Full Stack Developer" if variant == "fullstack" else "Senior Frontend Developer",
-            company="Acme Corp",
-            job_link="https://www.linkedin.com/jobs/view/4192384726/",
-            resume_link=resume_drive_link if variant == "fullstack" else resume_drive_link_frontend,
-            candidate_first_name=your_first_name,
-            candidate_bio=bio_fs if variant == "fullstack" else bio_fe,
-        )
-
-    # Row 1: recruiter templates
-    st.markdown("##### Recruiter invites")
-    c1, c2 = st.columns(2)
-    with c1:
-        tmpl_fs = st.text_area(
-            "Recruiter — Full Stack",
-            value=settings.get("inviteNoteTemplate", DEFAULT_INVITE_NOTE_TEMPLATE),
-            height=150,
-        )
-        p = preview(tmpl_fs, "fullstack", False)
-        st.code(p, language="text")
-        st.caption(f"Length: {len(p)} / {INVITE_NOTE_MAX}")
-    with c2:
-        tmpl_fe = st.text_area(
-            "Recruiter — Frontend",
-            value=settings.get("inviteNoteTemplateFrontend", DEFAULT_INVITE_NOTE_TEMPLATE_FRONTEND),
-            height=150,
-        )
-        p = preview(tmpl_fe, "frontend", False)
-        st.code(p, language="text")
-        st.caption(f"Length: {len(p)} / {INVITE_NOTE_MAX}")
-
-    # Row 2: hirer templates
-    st.markdown("##### Hirer (job poster) invites — sent FIRST per job")
-    c3, c4 = st.columns(2)
-    with c3:
-        tmpl_h_fs = st.text_area(
-            "Hirer — Full Stack",
-            value=settings.get("inviteNoteTemplateHirer", DEFAULT_INVITE_NOTE_TEMPLATE_HIRER),
-            height=150,
-        )
-        p = preview(tmpl_h_fs, "fullstack", True)
-        st.code(p, language="text")
-        st.caption(f"Length: {len(p)} / {INVITE_NOTE_MAX}")
-    with c4:
-        tmpl_h_fe = st.text_area(
-            "Hirer — Frontend",
-            value=settings.get("inviteNoteTemplateHirerFrontend", DEFAULT_INVITE_NOTE_TEMPLATE_HIRER_FRONTEND),
-            height=150,
-        )
-        p = preview(tmpl_h_fe, "frontend", True)
-        st.code(p, language="text")
-        st.caption(f"Length: {len(p)} / {INVITE_NOTE_MAX}")
-
-    if st.button("💾 Save all four note templates"):
+    if st.button("Save invite note"):
         settings.update({
             "inviteNoteTemplate": tmpl_fs,
-            "inviteNoteTemplateFrontend": tmpl_fe,
-            "inviteNoteTemplateHirer": tmpl_h_fs,
-            "inviteNoteTemplateHirerFrontend": tmpl_h_fe,
+            "inviteNoteTemplateFrontend": tmpl_fs,
+            "inviteNoteTemplateHirer": tmpl_fs,
+            "inviteNoteTemplateHirerFrontend": tmpl_fs,
+            "sendInviteNote": True,
         })
-        save_yaml(cfg)
-        st.success("Saved.")
-
-
-# ---------------------------------------------------------------- AI Prompt
-with tab_ai:
-    st.subheader("Gemini system prompt")
-    st.caption(
-        "Used when Gemini evaluates each job. Placeholders: "
-        "`{candidate_name}`, `{candidate_profile_block}`, `{candidate_pitch}`, `{resume_link}`, `{candidate_email}`."
-    )
-    ai_prompt = st.text_area(
-        "AI system prompt template",
-        value=settings.get("aiSystemPromptTemplate", DEFAULT_AI_SYSTEM_PROMPT_TEMPLATE),
-        height=420,
-    )
-    if st.button("💾 Save AI prompt"):
-        settings["aiSystemPromptTemplate"] = ai_prompt
         save_yaml(cfg)
         st.success("Saved.")
 
@@ -441,10 +300,10 @@ with tab_run:
         st.warning("Fill in LinkedIn credentials and Gemini API key in the sidebar.")
 
     c1, c2, c3, c4 = st.columns(4)
-    btn_s1 = c1.button("🔍 Stage 1 — Jobs", use_container_width=True)
-    btn_s2 = c2.button("🤝 Stage 2 — Invites", use_container_width=True)
-    btn_s3 = c3.button("📇 Stage 3 — Emails", use_container_width=True)
-    btn_all = c4.button("⚡ Stages 1 → 2", type="primary", use_container_width=True)
+    btn_s1 = c1.button("Stage 1 — Jobs", use_container_width=True)
+    btn_s2 = c2.button("Stage 2 — Invites", use_container_width=True)
+    btn_s3 = c3.button("Stage 3 — Emails", use_container_width=True)
+    btn_all = c4.button("Stages 1 → 2", type="primary", use_container_width=True)
 
     def _launch(stages: list[str]):
         os.environ["LINKEDIN_EMAIL"] = linkedin_email or ""
@@ -504,7 +363,7 @@ with tab_run:
     status = st.session_state.get("bot_status")
     if status == "running":
         st.info("Bot is running — watch the Chrome window. Refresh to update.")
-        if st.button("🔄 Refresh"):
+        if st.button("Refresh"):
             st.rerun()
     elif status == "done":
         st.success("Bot finished. Check Results tab.")
@@ -547,14 +406,14 @@ with tab_results:
         st.caption("Nothing to download yet.")
     else:
         st.download_button(
-            "⬇️ Download Excel (jobs + connections)",
+            "Download Excel (jobs + connections)",
             data=df_to_xlsx_bytes({"jobs": df_jobs, "connections": df_conn}),
             file_name=f"linkedin_referrals_{time.strftime('%Y%m%d_%H%M%S')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary",
         )
 
-    if st.button("🗑️ Clear all collected data"):
+    if st.button("Clear all collected data"):
         for p in (JOBS_CSV, CONNECTIONS_CSV):
             if p.exists():
                 p.unlink()
@@ -569,10 +428,11 @@ with tab_posts:
     cfg_posts = settings.get("postSearch", {})
     kw_default = ",".join(cfg_posts.get("keywords", []))
     kw_text = st.text_area("Keywords (comma-separated)", value=kw_default, height=80)
-    max_per = st.number_input("Max posts per keyword", 1, 500, cfg_posts.get("maxPostsPerKeyword", 20))
+    max_per = st.number_input("Best-match posts to review", 20, 50, min(max(cfg_posts.get("maxPostsPerKeyword", 20), 20), 50))
+    recent_24_hours = st.checkbox("Only recent posts from the last 24 hours", value=cfg_posts.get("recent24Hours", True))
 
     c1, c2 = st.columns(2)
-    if c1.button("🔎 Search posts"):
+    if c1.button("Search posts"):
         # persist settings + creds like Run tab
         os.environ["LINKEDIN_EMAIL"] = linkedin_email or ""
         os.environ["LINKEDIN_PASSWORD"] = linkedin_password or ""
@@ -585,6 +445,7 @@ with tab_posts:
         settings.setdefault("postSearch", {})
         settings["postSearch"]["keywords"] = [k.strip() for k in kw_text.split(",") if k.strip()]
         settings["postSearch"]["maxPostsPerKeyword"] = int(max_per)
+        settings["postSearch"]["recent24Hours"] = bool(recent_24_hours)
         save_yaml(cfg)
 
         from linkedinBot.bot import LinkedInBot
@@ -598,7 +459,11 @@ with tab_posts:
             bot = LinkedInBot(headless=headless, resume_paths=resume_paths)
             try:
                 bot.login()
-                bot.search_recent_posts(keywords=settings["postSearch"]["keywords"], max_per_keyword=int(max_per))
+                bot.search_recent_posts(
+                    keywords=settings["postSearch"]["keywords"],
+                    max_per_keyword=int(max_per),
+                    recent_24_hours=bool(recent_24_hours),
+                )
             finally:
                 bot.close()
 
@@ -611,7 +476,7 @@ with tab_posts:
         st.info("No posts collected yet — run a search.")
     else:
         st.dataframe(df_posts, use_container_width=True, height=300)
-        st.download_button("⬇️ Download CSV", data=df_posts.to_csv(index=False), file_name="posts_emails.csv")
+        st.download_button("Download CSV", data=df_posts.to_csv(index=False), file_name="posts_emails.csv")
 
     st.divider()
     st.subheader("Send outreach to discovered emails")
@@ -620,7 +485,7 @@ with tab_posts:
     dry_run_posts = st.checkbox("Dry run (don't actually send)", value=True)
 
     sp, ss = st.columns(2)
-    if sp.button("👀 Dry run (preview) for posts"):
+    if sp.button("Dry run (preview) for posts"):
         os.environ["GMAIL_USER"] = gmail_user or ""
         os.environ["GMAIL_APP_PASSWORD"] = gmail_app_password or ""
 
@@ -635,7 +500,7 @@ with tab_posts:
 
         run_in_thread(_dry)
 
-    if ss.button("📨 Send emails NOW (posts)"):
+    if ss.button("Send emails now (posts)"):
         if not (gmail_user and gmail_app_password):
             st.error("Gmail credentials missing — open the Gmail expander in the sidebar.")
         else:
@@ -674,7 +539,7 @@ with tab_email:
             unsent = eligible
 
         st.write(
-            f"📇 **{len(eligible)} recruiters with an email** "
+            f"**{len(eligible)} recruiters with an email** "
             f"({len(unsent)} unsent)."
         )
 
@@ -715,13 +580,13 @@ with tab_email:
             st.code(f"To: {r.get('email')}\nSubject: {preview_subj}\n\n{preview_body}", language="text")
 
         col_a, col_b, col_c = st.columns(3)
-        if col_a.button("💾 Save email templates"):
+        if col_a.button("Save email templates"):
             settings["emailSubjectTemplate"] = subj
             settings["emailBodyTemplate"] = body
             save_yaml(cfg)
             st.success("Saved.")
 
-        if col_b.button("👀 Dry run (preview all, send none)"):
+        if col_b.button("Dry run (preview all, send none)"):
             creds = GmailCreds(user=gmail_user or "x@x", app_password=gmail_app_password or "x")
             res = send_to_recruiters(
                 str(CONNECTIONS_CSV), subj, body, creds,
@@ -736,7 +601,7 @@ with tab_email:
             )
             st.info(f"Dry run: would send {res['sent']} emails, skip {res['skipped']}.")
 
-        if col_c.button("📨 Send emails NOW", type="primary"):
+        if col_c.button("Send emails now", type="primary"):
             if not (gmail_user and gmail_app_password):
                 st.error("Gmail credentials missing — open the Gmail expander in the sidebar.")
             else:
@@ -755,7 +620,7 @@ with tab_email:
                 if res["failed"]:
                     st.warning(f"Sent {res['sent']}, failed {res['failed']}, skipped {res['skipped']}.")
                 else:
-                    st.success(f"Sent {res['sent']} emails ✅ (skipped {res['skipped']}).")
+                    st.success(f"Sent {res['sent']} emails (skipped {res['skipped']}).")
 
         st.markdown("### Recipient list (with emails)")
         st.dataframe(eligible, use_container_width=True, height=340)

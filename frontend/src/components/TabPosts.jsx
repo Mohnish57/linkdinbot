@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import Icon from './Icon';
 
-function TabPosts({ config, status, apiUrl }) {
+function TabPosts({ config, saveConfig, status, apiUrl }) {
   const settings = config.settings || {};
   const postSearch = settings.postSearch || {};
   const [keywords, setKeywords] = useState((postSearch.keywords || []).join(', '));
-  const [maxPerKeyword, setMaxPerKeyword] = useState(postSearch.maxPostsPerKeyword || 20);
+  const [postLimit, setPostLimit] = useState(Math.min(Math.max(postSearch.maxPostsPerKeyword || 20, 20), 50));
+  const [recent24Hours, setRecent24Hours] = useState(postSearch.recent24Hours ?? true);
   const [posts, setPosts] = useState([]);
   const [subjectTemplate, setSubjectTemplate] = useState(settings.emailSubjectTemplate || '');
   const [bodyTemplate, setBodyTemplate] = useState(settings.emailBodyTemplate || '');
@@ -28,9 +29,20 @@ function TabPosts({ config, status, apiUrl }) {
   const searchPosts = async () => {
     try {
       const kw = keywords.split(',').map(k => k.trim()).filter(k => k);
+      const limit = Math.min(Math.max(parseInt(postLimit, 10) || 20, 20), 50);
+      await saveConfig({
+        settings: {
+          postSearch: {
+            keywords: kw,
+            maxPostsPerKeyword: limit,
+            recent24Hours,
+          },
+        },
+      });
       const creds = {
         keywords: kw,
-        max_per_keyword: parseInt(maxPerKeyword),
+        max_per_keyword: limit,
+        recent_24_hours: recent24Hours,
         linkedin_email: localStorage.getItem('linkedin_email'),
         linkedin_password: localStorage.getItem('linkedin_password'),
       };
@@ -63,7 +75,7 @@ function TabPosts({ config, status, apiUrl }) {
   return (
     <div>
       <h2 className="heading-with-icon"><Icon name="document" /> Search posts & outreach</h2>
-      <p>Search public LinkedIn posts by keyword, collect emails found, and send outreach.</p>
+      <p>Search recent LinkedIn posts by keyword, collect emails found, and send outreach.</p>
 
       <div style={{ marginTop: '20px' }}>
         <label><strong>Keywords (comma-separated)</strong></label>
@@ -76,16 +88,25 @@ function TabPosts({ config, status, apiUrl }) {
       </div>
 
       <div style={{ marginTop: '15px' }}>
-        <label><strong>Max posts per keyword</strong></label>
+        <label><strong>Best-match posts to review</strong></label>
         <input
           type="number"
-          min="1"
-          max="500"
-          value={maxPerKeyword}
-          onChange={(e) => setMaxPerKeyword(e.target.value)}
+          min="20"
+          max="50"
+          value={postLimit}
+          onChange={(e) => setPostLimit(e.target.value)}
           style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
         />
       </div>
+
+      <label style={{ marginTop: '15px', display: 'block' }}>
+        <input
+          type="checkbox"
+          checked={recent24Hours}
+          onChange={(e) => setRecent24Hours(e.target.checked)}
+        />
+        Only recent posts from the last 24 hours
+      </label>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '15px' }}>
         <button

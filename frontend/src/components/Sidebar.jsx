@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import './Sidebar.css';
 import Icon from './Icon';
 
-function Sidebar({ config, saveConfig }) {
-  const candidate = config.candidate || {};
-
+function Sidebar() {
   const [linkedinEmail, setLinkedinEmail] = useState(localStorage.getItem('linkedin_email') || '');
   const [linkedinPassword, setLinkedinPassword] = useState(localStorage.getItem('linkedin_password') || '');
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || '');
@@ -23,35 +21,10 @@ function Sidebar({ config, saveConfig }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-content">
-        <h2 className="heading-with-icon"><Icon name="user" /> You</h2>
-        <input
-          type="text"
-          placeholder="Full name"
-          defaultValue={candidate.name || ''}
-          onChange={(e) => saveConfig({ candidate: { ...candidate, name: e.target.value } })}
-          className="input"
-        />
-        <input
-          type="text"
-          placeholder="First name"
-          defaultValue={candidate.first_name || ''}
-          onChange={(e) => saveConfig({ candidate: { ...candidate, first_name: e.target.value } })}
-          className="input"
-        />
+        <h2 className="heading-with-icon"><Icon name="key" /> LinkedIn login</h2>
         <input
           type="email"
-          placeholder="Your email"
-          defaultValue={candidate.email || ''}
-          onChange={(e) => saveConfig({ candidate: { ...candidate, email: e.target.value } })}
-          className="input"
-        />
-
-        <hr />
-
-        <h3 className="heading-with-icon"><Icon name="key" /> LinkedIn login</h3>
-        <input
-          type="email"
-          placeholder="LinkedIn email"
+          placeholder="LinkedIn ID or email"
           value={linkedinEmail}
           onChange={(e) => setLinkedinEmail(e.target.value)}
           className="input"

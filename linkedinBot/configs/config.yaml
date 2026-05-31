@@ -7,10 +7,18 @@ settings:
   contactHirerFirst: true
   resumeDriveLink: https://drive.google.com/your_resume_link
   resumeDriveLinkFrontend: https://drive.google.com/your_resume_link
-  inviteNoteTemplate: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw the {job_title} role; strong fit, would love a referral. Resume: {resume_link}'
-  inviteNoteTemplateFrontend: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw the {job_title} role; strong fit, would love a referral. Resume: {resume_link}'
-  inviteNoteTemplateHirer: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw you posted the {job_title} role at {company}; strong fit. Resume: {resume_link}'
-  inviteNoteTemplateHirerFrontend: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw you posted the {job_title} role at {company}; strong fit. Resume: {resume_link}'
+  inviteNoteTemplate: |
+    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
+    I'd love to connect. Resume: {drive_link}
+  inviteNoteTemplateFrontend: |
+    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
+    I'd love to connect. Resume: {drive_link}
+  inviteNoteTemplateHirer: |
+    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
+    I'd love to connect. Resume: {drive_link}
+  inviteNoteTemplateHirerFrontend: |
+    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
+    I'd love to connect. Resume: {drive_link}
   aiSystemPromptTemplate: |
     You are an AI evaluating {candidate_name}''s fit for a software engineering role.
 
@@ -59,6 +67,7 @@ settings:
   postSearch:
     keywords: []
     maxPostsPerKeyword: 20
+    recent24Hours: true
 jobPreferences:
   jobTypes:
     full-time: true
