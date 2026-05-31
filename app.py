@@ -164,7 +164,7 @@ with st.sidebar:
         st.session_state["resume_path_fullstack"] = str(p)
         st.success(f"Saved → {p.name}")
     else:
-        default = PROJECT_ROOT / "Mohnish_Resume_Full_Stack_Developer.pdf"
+        default = PROJECT_ROOT / "resume_fullstack.pdf"
         if default.exists():
             st.session_state.setdefault("resume_path_fullstack", str(default))
             st.caption(f"Default: `{default.name}`")
@@ -176,7 +176,7 @@ with st.sidebar:
         st.session_state["resume_path_frontend"] = str(p)
         st.success(f"Saved → {p.name}")
     else:
-        default = PROJECT_ROOT / "Mohnish_Resume_Frontend_Developer.pdf"
+        default = PROJECT_ROOT / "resume_frontend.pdf"
         if default.exists():
             st.session_state.setdefault("resume_path_frontend", str(default))
             st.caption(f"Default: `{default.name}`")

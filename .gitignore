@@ -25,3 +25,6 @@ Thumbs.db
 
 # Git metadata for nested repos
 linkedinBot/.git
+
+run.ipynb
+resume_*.pdf

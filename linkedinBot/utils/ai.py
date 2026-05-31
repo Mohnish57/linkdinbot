@@ -8,16 +8,16 @@ import os
 INVITE_NOTE_MAX = 300
 
 # Defaults — every value here is overridable from config.yaml / the UI.
-DEFAULT_RESUME_DRIVE_LINK = "https://drive.google.com/file/d/1VQh9qPqK4yIw4ebxQ4KjKaKpZo_ajujz/view?usp=sharing"
+DEFAULT_RESUME_DRIVE_LINK = "https://drive.google.com/your_resume_link"
 
-DEFAULT_CANDIDATE_NAME = "Mohnish Sawlani"
-DEFAULT_CANDIDATE_FIRST_NAME = "Mohnish"
-DEFAULT_CANDIDATE_EMAIL = "sawlanimohnish@gmail.com"
+DEFAULT_CANDIDATE_NAME = "Your Name"
+DEFAULT_CANDIDATE_FIRST_NAME = "Your"
+DEFAULT_CANDIDATE_EMAIL = "your-email@example.com"
 DEFAULT_CANDIDATE_BIO_FULLSTACK = (
-    "Full Stack Dev (4+ yrs, React/Node/Python)"
+    "Experienced Software Engineer (Node.js, Python, React)"
 )
 DEFAULT_CANDIDATE_BIO_FRONTEND = (
-    "Frontend Dev (4+ yrs, React/Next.js/UI/UX)"
+    "Experienced Frontend Engineer (React, Next.js, TypeScript)"
 )
 
 # Recruiter / hirer invite templates. Placeholders supported:
@@ -96,20 +96,16 @@ If NO, return ONLY the line `Match Status: NO` and nothing else.
 """
 
 # Default candidate profile block used to fill the AI prompt — also configurable.
-DEFAULT_CANDIDATE_PROFILE_BLOCK = """- 4+ years building scalable SaaS, e-commerce, real-time apps, cloud-native products.
-- Frontend: React.js, Next.js, JavaScript, TypeScript, Redux, Tailwind CSS, Material UI.
-- Backend: Node.js, Express.js, Python, FastAPI, REST APIs, GraphQL, WebSockets, SSE.
-- DB: MongoDB, DynamoDB, PostgreSQL, Supabase.
-- Cloud/DevOps: AWS Lambda, EC2, S3, SQS, GitHub Actions, Azure DevOps, CI/CD, Docker.
-- Automation: Playwright, Chromium, ETL pipelines.
-- Commerce: Shopify Plus, Liquid, Storefront API, Admin GraphQL API.
-- Currently SDE II / Frontend Lead at Wednesday Solutions."""
+DEFAULT_CANDIDATE_PROFILE_BLOCK = """- 4+ years building scalable web applications and SaaS products.
+- Frontend: React.js, Next.js, TypeScript, Redux, Tailwind CSS.
+- Backend: Node.js, Python, FastAPI, REST APIs, GraphQL.
+- DB: PostgreSQL, MongoDB, Redis.
+- Cloud: AWS, Docker, CI/CD, GitHub Actions.
+- Automation: Selenium, Playwright, test automation.
+- Strong product focus, collaboration, and technical ownership."""
 
 DEFAULT_CANDIDATE_PITCH = (
-    "I'm a Full Stack Developer with 4+ years of experience building scalable "
-    "SaaS platforms, e-commerce systems, and real-time apps using React.js, "
-    "Node.js, Python, GraphQL, and AWS. Most recently SDE II / Frontend Lead "
-    "at Wednesday Solutions."
+    "I'm a software engineer with 4+ years of experience building scalable web applications and APIs using React, Node.js, Python, and AWS. I enjoy delivering high-quality products and collaborating with cross-functional teams."
 )
 
 
@@ -136,7 +132,7 @@ _BACKEND_JD_HINTS = (
 
 
 def classify_role(job_title, job_description=""):
-    """Decide whether this job should be matched with Mohnish's Frontend or
+    """Decide whether this job should be matched with the candidate's Frontend or
     Full Stack resume. Returns "frontend" or "fullstack".
     """
     title = (job_title or "").lower()
@@ -221,7 +217,7 @@ class JobMatchEvaluator:
         return "Error: All Gemini models reached rate limit. Try again later."
 
     def check_job_match(self, job_description, job_title=""):
-        """Evaluate whether Mohnish is a fit for the supplied job.
+        """Evaluate whether the candidate is a fit for the supplied job.
 
         Auto-routes to the Frontend resume when the role is UI/UX/Frontend
         focused (via `classify_role`), otherwise uses the Full Stack resume.

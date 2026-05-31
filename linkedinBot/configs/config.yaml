@@ -4,121 +4,57 @@ settings:
   maxPeoplePerProfile: 3
   recruitersOnly: true
   sendInviteNote: true
-  resumeDriveLink: https://drive.google.com/file/d/1VQh9qPqK4yIw4ebxQ4KjKaKpZo_ajujz/view?usp=sharing
-  resumeDriveLinkFrontend: https://drive.google.com/file/d/1VQh9qPqK4yIw4ebxQ4KjKaKpZo_ajujz/view?usp=sharing
-  inviteNoteTemplate: 'Hi {name}, I''m Mohnish — Full Stack Dev (4+ yrs, React/Node/Python).
-    Saw the {job_title} role; strong fit, would love a referral. Resume: {resume_link}'
-  inviteNoteTemplateFrontend: 'Hi {name}, I''m Mohnish — Frontend Dev (4+ yrs, React/Next.js/UI/UX).
-    Saw the {job_title} role; strong fit, would love a referral. Resume: {resume_link}'
   contactHirerFirst: true
-  inviteNoteTemplateHirer: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}.
-    Saw you posted the {job_title} role at {company}; strong fit. Resume: {resume_link}'
-  inviteNoteTemplateHirerFrontend: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}.
-    Saw you posted the {job_title} role at {company}; strong fit. Resume: {resume_link}'
-  aiSystemPromptTemplate: 'You are an AI evaluating {candidate_name}''s fit for a
-    software engineering role.
-
+  resumeDriveLink: https://drive.google.com/your_resume_link
+  resumeDriveLinkFrontend: https://drive.google.com/your_resume_link
+  inviteNoteTemplate: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw the {job_title} role; strong fit, would love a referral. Resume: {resume_link}'
+  inviteNoteTemplateFrontend: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw the {job_title} role; strong fit, would love a referral. Resume: {resume_link}'
+  inviteNoteTemplateHirer: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw you posted the {job_title} role at {company}; strong fit. Resume: {resume_link}'
+  inviteNoteTemplateHirerFrontend: 'Hi {name}, I''m {candidate_first_name} — {candidate_bio}. Saw you posted the {job_title} role at {company}; strong fit. Resume: {resume_link}'
+  aiSystemPromptTemplate: |
+    You are an AI evaluating {candidate_name}''s fit for a software engineering role.
 
     Candidate profile:
-
     {candidate_profile_block}
 
-
     ### Decision Criteria
+    Recommend YES if:
+    - The role is a software engineering / web / frontend / backend / full-stack / SaaS / cloud / automation role.
+    - Candidate meets at least 60% of the core technical requirements.
+    - Experience gap is 3 years or less.
+    - Role is not a pure data-science / ML-research / mobile-only / embedded / QA-only role unless the candidate has matching exposure.
 
-    Recommend **YES** if:
-
-    - The role is a software engineering / web / frontend / backend / full-stack /
-    SaaS / cloud / automation role.
-
-    - Candidate meets at least 60% of the core technical requirements (or has equivalent
-    transferable tech).
-
-    - Experience gap is 3 years or less (i.e. role asks for <= 7 yrs).
-
-    - Role is NOT a pure data-science / ML-research / mobile-only (iOS/Android native)
-    / embedded / DevOps-SRE-only / QA-only role unless the candidate has matching
-    exposure.
-
-
-    Recommend **NO** if:
-
-    - Role demands deep niche tech not in the profile (Rust, Go primary, Solidity,
-    Salesforce, SAP, .NET, Java backend primary, Android/iOS native, etc.) and lists
-    them as required.
-
+    Recommend NO if:
+    - Role demands deep niche tech not in the profile (Rust, Go, Solidity, Salesforce, SAP, .NET, Java backend primary, Android/iOS native, etc.).
     - Senior+ role demanding 8+ yrs experience.
-
     - Pure non-engineering role (PM, BA, sales, support, marketing).
 
-
     ### Response Format (strict)
+    First line: Match Status: YES or Match Status: NO.
 
-    First line: `Match Status: YES` or `Match Status: NO`.
-
-
-    If YES, next list 7 short (2–4 word) keywords that either don''t appear in the
-    resume verbatim or should be reworded to mirror the JD''s terminology. At least
-    3 must be technical (frameworks, tools, services). Use bullet lines starting with
-    `- `.
-
-
-    Then output `Referral Message:` on its own line followed by a longer (multi-line)
-    friendly referral request — used as a follow-up DM after connection accepts. Format:
-
-
+    If YES, list short keywords that don''t appear in the resume and then output Referral Message:
     Hi {{Name}},
-
     Thanks for connecting!
-
-
-    I''m interested in the **{{job_title}}** role at **{{company}}** and noticed you''re
-    a recruiter / hiring there.
-
-    I''d really appreciate it if you could refer me for this role.
-
-
+    I''m interested in the **{{job_title}}** role at **{{company}}** and noticed you''re a recruiter / hiring there.
     Job link: {{job_link or job id}}
-
-
     Quick context — {candidate_pitch}
-
-
     Resume: {resume_link}
-
-
     Thanks so much for your support!
-
     {candidate_name}
-
     {candidate_email}
-
-
-    If NO, return ONLY the line `Match Status: NO` and nothing else.
-
-    '
   emailSubjectTemplate: 'Referral request: {job_title} at {company}'
-  emailBodyTemplate: 'Hi {name},
+  emailBodyTemplate: |
+    Hi {name},
 
-
-    I came across the {job_title} opening at {company} and felt my background is a
-    strong match.
-
+    I came across the {job_title} opening at {company} and felt my background is a strong match.
 
     Quick context — I''m {candidate_first_name}, a {candidate_bio_long}. Resume: {resume_link}
 
-
-    If the role is still open, I''d be grateful for a referral or any pointer toward
-    the hiring manager.
-
+    If the role is still open, I''d be grateful for a referral or any pointer toward the hiring manager.
 
     Thanks!
-
     {candidate_name}
-
     {candidate_email}
-
-    '
 jobPreferences:
   jobTypes:
     full-time: true
@@ -135,89 +71,60 @@ jobPreferences:
     3_days: false
     last_24_hours: false
   positions:
-  - Full Stack Developer
-  - Frontend Developer
-  - React Developer
-  - Backend Developer
-  - Node.js Developer
-  - Software Engineer
-  - Shopify Developer
+    - Software Engineer
+    - Full Stack Developer
+    - Frontend Developer
+    - Backend Developer
+    - React Developer
   people_profiles:
-  - Recruiter
-  - Talent Acquisition
-  - Hiring
-  - HR
+    - Recruiter
+    - Talent Acquisition
+    - Hiring
+    - HR
   recruiterKeywords:
-  - recruiter
-  - talent acquisition
-  - talent partner
-  - hiring
-  - people operations
-  - human resources
-  - hr
-  - ta specialist
-  - sourcer
-  blacklistedEmployeeCounts:
-  - '1-10 '
-  - 2-10
+    - recruiter
+    - talent acquisition
+    - hiring
+    - people operations
+    - human resources
+    - ta specialist
+    - sourcer
+  blacklistedEmployeeCounts: []
   blacklistedTitles:
-  - Intern
-  - Manager,
-  - Senior Manager
-  - Director
-  - VP
-  - Principal
-  - Architect
-  - Staff Engineer
-  - SAP
-  - Salesforce
-  - Java Developer
-  - .NET
-  - Android Developer
-  - iOS Developer
-  - Mobile Developer
-  - QA
-  - Tester
-  - Data Scientist
-  - Data Engineer
-  - ML Engineer
-  - DevOps
-  - SRE
-  - Embedded
+    - Intern
+    - Director
+    - VP
+    - Principal
+    - Architect
+    - Staff Engineer
+    - QA
+    - Data Scientist
+    - Data Engineer
+    - ML Engineer
+    - DevOps
+    - SRE
+    - Embedded
   blacklistedDescription:
-  - Walk in
-  - Night Shift
-  - Rotational Shift
-  - 8+ years
-  - 10+ years
-  blacklistedCompanies:
-  - Wednesday Solutions
-gsheet_id: 1Z3CvIyCGuTjZa9uNlGNGzpJCCLrzvvq6XD_mct39ZnU
+    - Walk in
+    - Night Shift
+    - Rotational Shift
+    - 8+ years
+    - 10+ years
+  blacklistedCompanies: []
+gsheet_id: ''
 candidate:
-  name: Mohnish Sawlani
-  first_name: Mohnish
-  email: sawlanimohnish@gmail.com
-  bio_fullstack: Full Stack Dev (4+ yrs, React/Node/Python)
-  bio_frontend: Frontend Dev (4+ yrs, React/Next.js/UI/UX)
-  profile_block: '- 4+ years building scalable SaaS, e-commerce, real-time apps, cloud-native
-    products.
-
-    - Frontend: React.js, Next.js, JavaScript, TypeScript, Redux, Tailwind CSS, Material
-    UI.
-
-    - Backend: Node.js, Express.js, Python, FastAPI, REST APIs, GraphQL, WebSockets,
-    SSE.
-
-    - DB: MongoDB, DynamoDB, PostgreSQL, Supabase.
-
-    - Cloud/DevOps: AWS Lambda, EC2, S3, SQS, GitHub Actions, Azure DevOps, CI/CD,
-    Docker.
-
-    - Automation: Playwright, Chromium, ETL pipelines.
-
-    - Commerce: Shopify Plus, Liquid, Storefront API, Admin GraphQL API.
-
-    - Currently SDE II / Frontend Lead at Wednesday Solutions.'
-  pitch: I'm a Full Stack Developer with 4+ years of experience building scalable
-    SaaS platforms, e-commerce systems, and real-time apps using React.js, Node.js,
-    Python, GraphQL, and AWS. Most recently SDE II / Frontend Lead at Wednesday Solutions.
+  name: Your Name
+  first_name: Your
+  email: your-email@example.com
+  bio_fullstack: Experienced Software Engineer (Node.js, Python, React)
+  bio_frontend: Experienced Frontend Engineer (React, Next.js, TypeScript)
+  profile_block: |
+    - 4+ years building scalable web applications and SaaS products.
+    - Frontend: React.js, Next.js, TypeScript, Redux, Tailwind CSS.
+    - Backend: Node.js, Python, FastAPI, REST APIs, GraphQL.
+    - DB: PostgreSQL, MongoDB, Redis.
+    - Cloud: AWS, Docker, CI/CD, GitHub Actions.
+    - Automation: Selenium, Playwright, test automation.
+    - Strong product focus, collaboration, and technical ownership.
+  pitch: |
+    I''m a software engineer with 4+ years of experience building scalable web applications and APIs using React, Node.js, Python, and AWS. I enjoy delivering high-quality products and collaborating with cross-functional teams.
