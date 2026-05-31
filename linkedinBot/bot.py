@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 current_file_path = os.path.dirname(os.path.abspath(__file__))
