@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 function TabPosts({ config, status, apiUrl }) {
@@ -11,18 +11,18 @@ function TabPosts({ config, status, apiUrl }) {
   const [bodyTemplate, setBodyTemplate] = useState(settings.emailBodyTemplate || '');
   const [dryRun, setDryRun] = useState(true);
 
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/results/posts`);
       setPosts(res.data.data || []);
     } catch (err) {
       console.error('Failed to fetch posts:', err);
     }
-  };
+  }, [apiUrl]);
 
   useEffect(() => {
     fetchPosts();
-  }, []);
+  }, [fetchPosts]);
 
   const searchPosts = async () => {
     try {

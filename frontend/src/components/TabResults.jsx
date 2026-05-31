@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 function TabResults({ apiUrl }) {
@@ -6,11 +6,7 @@ function TabResults({ apiUrl }) {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchResults();
-  }, []);
-
-  const fetchResults = async () => {
+  const fetchResults = useCallback(async () => {
     try {
       const [jobsRes, connRes] = await Promise.all([
         axios.get(`${apiUrl}/api/results/jobs`),
@@ -22,7 +18,11 @@ function TabResults({ apiUrl }) {
       console.error('Failed to fetch results:', err);
     }
     setLoading(false);
-  };
+  }, [apiUrl]);
+
+  useEffect(() => {
+    fetchResults();
+  }, [fetchResults]);
 
   const clearResults = async () => {
     if (window.confirm('Clear all collected data?')) {

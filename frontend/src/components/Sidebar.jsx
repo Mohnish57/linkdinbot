@@ -3,7 +3,6 @@ import './Sidebar.css';
 
 function Sidebar({ config, saveConfig }) {
   const candidate = config.candidate || {};
-  const settings = config.settings || {};
 
   const [linkedinEmail, setLinkedinEmail] = useState(localStorage.getItem('linkedin_email') || '');
   const [linkedinPassword, setLinkedinPassword] = useState(localStorage.getItem('linkedin_password') || '');
