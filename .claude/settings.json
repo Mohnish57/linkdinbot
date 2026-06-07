@@ -4,7 +4,16 @@
       "Read(//Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/**)",
       "Bash(pip3 --version)",
       "Bash(npm install *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(../backend/venv/bin/python app.py)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -s http://localhost:5001/api/health)",
+      "Bash(curl -s http://localhost:5001/api/status)",
+      "Bash(curl -s http://localhost:5001/api/config)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://localhost:5001/api/bot/stage1 -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(kill 12270)",
+      "Read(//private/tmp/**)",
+      "Bash(git rm *)"
     ]
   }
 }

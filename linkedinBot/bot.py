@@ -9,6 +9,7 @@ import re
 import time
 import random
 import ast
+from pathlib import Path
 from urllib.parse import quote_plus
 
 import yaml
@@ -216,7 +217,17 @@ class LinkedInBot:
         browser_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         browser_options.add_experimental_option("useAutomationExtension", False)
 
-        service = Service(ChromeDriverManager().install())
+        driver_path = ChromeDriverManager().install()
+        # webdriver-manager sometimes returns a sibling file (e.g.
+        # THIRD_PARTY_NOTICES.chromedriver) instead of the real binary.
+        # Point Service at the actual `chromedriver` in the same directory.
+        driver_path = Path(driver_path)
+        if driver_path.name != "chromedriver":
+            real = driver_path.parent / "chromedriver"
+            if real.exists():
+                driver_path = real
+        os.chmod(driver_path, 0o755)
+        service = Service(str(driver_path))
         driver = webdriver.Chrome(service=service, options=browser_options)
         driver.set_window_position(0, 0)
         driver.maximize_window()
@@ -258,22 +269,144 @@ class LinkedInBot:
         time.sleep(random.uniform(3, 5))
 
         email, password = self.config.get("email"), self.config.get("password")
+        # LinkedIn's /login is now a React SPA — the form mounts after JS hydration,
+        # so a short presence wait will time out. Try several selectors and wait longer.
+        # LinkedIn ships two copies of the login form (desktop + responsive
+        # variant). The first in DOM order is hidden via CSS, so we must
+        # iterate through every match and pick the first one that's visible.
+        user_selectors = [
+            (By.CSS_SELECTOR, "input[autocomplete*='username']"),
+            (By.CSS_SELECTOR, "input[type='email']"),
+            (By.ID, "username"),
+            (By.NAME, "session_key"),
+        ]
+        pw_selectors = [
+            (By.CSS_SELECTOR, "input[autocomplete*='current-password']"),
+            (By.CSS_SELECTOR, "input[type='password']"),
+            (By.ID, "password"),
+            (By.NAME, "session_password"),
+        ]
+
+        def _find_first(selectors, timeout):
+            end = time.time() + timeout
+            attempts = 0
+            while time.time() < end:
+                attempts += 1
+                for by, sel in selectors:
+                    try:
+                        els = self.driver.find_elements(by, sel)
+                    except Exception as ex:
+                        print(f"  selector {sel!r} errored: {ex}")
+                        els = []
+                    for idx, el in enumerate(els):
+                        try:
+                            if el.is_displayed() and el.is_enabled():
+                                print(
+                                    f"  matched selector {sel!r} (match #{idx + 1}/{len(els)})"
+                                )
+                                return el
+                        except Exception:
+                            continue
+                time.sleep(0.5)
+            print(f"  _find_first gave up after {attempts} polls")
+            return None
+
+        def _switch_into_login_iframe():
+            """If the form is inside an iframe, switch into the first iframe
+            that contains a username-looking input. Returns True if switched."""
+            try:
+                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+            except Exception:
+                iframes = []
+            for frame in iframes:
+                try:
+                    self.driver.switch_to.frame(frame)
+                    for by, sel in user_selectors:
+                        try:
+                            el = self.driver.find_element(by, sel)
+                            if el.is_displayed():
+                                return True
+                        except NoSuchElementException:
+                            continue
+                    self.driver.switch_to.default_content()
+                except Exception:
+                    try:
+                        self.driver.switch_to.default_content()
+                    except Exception:
+                        pass
+            return False
+
+        def _dump_login_diagnostics():
+            try:
+                print(f"  login diagnostic: url={self.driver.current_url}")
+                print(f"  login diagnostic: title={self.driver.title!r}")
+                inputs = self.driver.find_elements(By.TAG_NAME, "input")
+                print(f"  login diagnostic: {len(inputs)} <input> elements")
+                for el in inputs[:15]:
+                    try:
+                        print(
+                            "    input id={!r} name={!r} type={!r} autocomplete={!r}".format(
+                                el.get_attribute("id"),
+                                el.get_attribute("name"),
+                                el.get_attribute("type"),
+                                el.get_attribute("autocomplete"),
+                            )
+                        )
+                    except Exception:
+                        pass
+                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                print(f"  login diagnostic: {len(iframes)} iframes")
+                for fr in iframes[:5]:
+                    try:
+                        print(f"    iframe src={fr.get_attribute('src')!r}")
+                    except Exception:
+                        pass
+                shot_path = "/tmp/linkedin_login_debug.png"
+                try:
+                    self.driver.save_screenshot(shot_path)
+                    print(f"  login diagnostic: screenshot saved to {shot_path}")
+                except Exception as ex:
+                    print(f"  login diagnostic: screenshot failed: {ex}")
+            except Exception as ex:
+                print(f"  login diagnostic: dump failed: {ex}")
+
         try:
-            user_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "username"))
-            )
+            user_field = _find_first(user_selectors, timeout=45)
+            if user_field is None and _switch_into_login_iframe():
+                user_field = _find_first(user_selectors, timeout=10)
+            if user_field is None:
+                _dump_login_diagnostics()
+                raise TimeoutException("login form did not appear in 45s")
             if email and password:
                 user_field.clear()
                 user_field.send_keys(email)
-                pw = self.driver.find_element(By.ID, "password")
+                pw = _find_first(pw_selectors, timeout=10)
+                if pw is None:
+                    raise TimeoutException("password field did not appear")
                 pw.clear()
                 pw.send_keys(password)
-                self.driver.find_element(By.CSS_SELECTOR, ".btn__primary--large").click()
+                submit_selectors = [
+                    (By.CSS_SELECTOR, "button[data-litms-control-urn='login-submit']"),
+                    (By.CSS_SELECTOR, "button[type='submit']"),
+                    (By.CSS_SELECTOR, "button[aria-label*='Sign in']"),
+                    (By.CSS_SELECTOR, ".btn__primary--large"),
+                ]
+                submit_btn = _find_first(submit_selectors, timeout=5)
+                if submit_btn is not None:
+                    try:
+                        submit_btn.click()
+                        print("  clicked submit button")
+                    except Exception as ex:
+                        print(f"  submit click failed ({ex}); falling back to Enter key")
+                        pw.send_keys(Keys.RETURN)
+                else:
+                    print("  no visible submit button — submitting with Enter key")
+                    pw.send_keys(Keys.RETURN)
                 time.sleep(random.uniform(5, 8))
             else:
                 print("No credentials in env — please login manually in the browser.")
-        except TimeoutException:
-            print("Login form not found — LinkedIn may be showing a different screen.")
+        except TimeoutException as e:
+            print(f"Login form not found ({e}) — LinkedIn may be showing a different screen.")
 
         # If still not logged in (captcha / 2FA / pin), wait for the user to finish
         # in the Chrome window. We poll instead of using input() so this works when

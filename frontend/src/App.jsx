@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -12,11 +12,9 @@ import TabResults from './components/TabResults';
 import TabEmail from './components/TabEmail';
 import Icon from './components/Icon';
 
-const API_URL = process.env.REACT_APP_API_URL || (
-  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:5000'
-    : ''
-);
+// Local app: the React dev server (port 3000) talks to the Flask bot backend
+// on port 5001. Override with REACT_APP_API_URL only if you change the port.
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 function App() {
   const [activeTab, setActiveTab] = useState('setup');
@@ -24,11 +22,22 @@ function App() {
   const [status, setStatus] = useState({ state: 'idle' });
   const [loading, setLoading] = useState(true);
 
-  // Load config on mount
+  // Keep the latest state in a ref so the poller can read it without re-running.
+  const stateRef = useRef(status.state);
+  stateRef.current = status.state;
+
+  // Load config once, then poll status adaptively: fast only while a job runs,
+  // slow when idle (avoids hammering the API every second).
   useEffect(() => {
     fetchConfig();
-    const interval = setInterval(fetchStatus, 1000); // Poll status every second
-    return () => clearInterval(interval);
+    let timer;
+    const poll = async () => {
+      await fetchStatus();
+      timer = setTimeout(poll, stateRef.current === 'running' ? 2000 : 10000);
+    };
+    timer = setTimeout(poll, 1000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchConfig = async () => {

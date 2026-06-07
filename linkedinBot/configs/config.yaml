@@ -5,65 +5,117 @@ settings:
   recruitersOnly: true
   sendInviteNote: true
   contactHirerFirst: true
-  resumeDriveLink: https://drive.google.com/your_resume_link
-  resumeDriveLinkFrontend: https://drive.google.com/your_resume_link
-  inviteNoteTemplate: |
-    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
-    I'd love to connect. Resume: {drive_link}
-  inviteNoteTemplateFrontend: |
-    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
-    I'd love to connect. Resume: {drive_link}
-  inviteNoteTemplateHirer: |
-    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
-    I'd love to connect. Resume: {drive_link}
-  inviteNoteTemplateHirerFrontend: |
-    Hi {name}, I came across the {job_title} opening at your company and believe my experience aligns well with the role.
-    I'd love to connect. Resume: {drive_link}
-  aiSystemPromptTemplate: |
-    You are an AI evaluating {candidate_name}''s fit for a software engineering role.
+  resumeDriveLink: https://tinyurl.com/23lvedje
+  resumeDriveLinkFrontend: https://tinyurl.com/23lvedje
+  inviteNoteTemplate: 'Hi {name}, I came across the {job_title} opening at your company
+    and believe my experience aligns well with the role.
+
+    I''d love to connect. Resume: {drive_link}
+
+    '
+  inviteNoteTemplateFrontend: 'Hi {name}, I came across the {job_title} opening at
+    your company and believe my experience aligns well with the role.
+
+    I''d love to connect. Resume: {drive_link}
+
+    '
+  inviteNoteTemplateHirer: 'Hi {name}, I came across the {job_title} opening at your
+    company and believe my experience aligns well with the role.
+
+    I''d love to connect. Resume: {drive_link}
+
+    '
+  inviteNoteTemplateHirerFrontend: 'Hi {name}, I came across the {job_title} opening
+    at your company and believe my experience aligns well with the role.
+
+    I''d love to connect. Resume: {drive_link}
+
+    '
+  aiSystemPromptTemplate: 'You are an AI evaluating {candidate_name}''''s fit for
+    a software engineering role.
+
 
     Candidate profile:
+
     {candidate_profile_block}
 
+
     ### Decision Criteria
+
     Recommend YES if:
-    - The role is a software engineering / web / frontend / backend / full-stack / SaaS / cloud / automation role.
+
+    - The role is a software engineering / web / frontend / backend / full-stack /
+    SaaS / cloud / automation role.
+
     - Candidate meets at least 60% of the core technical requirements.
+
     - Experience gap is 3 years or less.
-    - Role is not a pure data-science / ML-research / mobile-only / embedded / QA-only role unless the candidate has matching exposure.
+
+    - Role is not a pure data-science / ML-research / mobile-only / embedded / QA-only
+    role unless the candidate has matching exposure.
+
 
     Recommend NO if:
-    - Role demands deep niche tech not in the profile (Rust, Go, Solidity, Salesforce, SAP, .NET, Java backend primary, Android/iOS native, etc.).
+
+    - Role demands deep niche tech not in the profile (Rust, Go, Solidity, Salesforce,
+    SAP, .NET, Java backend primary, Android/iOS native, etc.).
+
     - Senior+ role demanding 8+ yrs experience.
+
     - Pure non-engineering role (PM, BA, sales, support, marketing).
 
+
     ### Response Format (strict)
+
     First line: Match Status: YES or Match Status: NO.
 
-    If YES, list short keywords that don''t appear in the resume and then output Referral Message:
+
+    If YES, list short keywords that don''''t appear in the resume and then output
+    Referral Message:
+
     Hi {{Name}},
+
     Thanks for connecting!
-    I''m interested in the **{{job_title}}** role at **{{company}}** and noticed you''re a recruiter / hiring there.
+
+    I''''m interested in the **{{job_title}}** role at **{{company}}** and noticed
+    you''''re a recruiter / hiring there.
+
     Job link: {{job_link or job id}}
+
     Quick context — {candidate_pitch}
+
     Resume: {resume_link}
+
     Thanks so much for your support!
+
     {candidate_name}
+
     {candidate_email}
+
+    '
   emailSubjectTemplate: 'Referral request: {job_title} at {company}'
-  emailBodyTemplate: |
-    Hi {name},
+  emailBodyTemplate: 'Hi {name},
 
-    I came across the {job_title} opening at {company} and felt my background is a strong match.
 
-    Quick context — I''m {candidate_first_name}, a {candidate_bio_long}. Resume: {resume_link}
+    I came across the {job_title} opening at {company} and felt my background is a
+    strong match.
 
-    If the role is still open, I''d be grateful for a referral or any pointer toward the hiring manager.
+
+    Quick context — I''''m {candidate_first_name}, a {candidate_bio_long}. Resume:
+    {resume_link}
+
+
+    If the role is still open, I''''d be grateful for a referral or any pointer toward
+    the hiring manager.
+
 
     Thanks!
+
     {candidate_name}
+
     {candidate_email}
-  # Post-search configuration: keywords to search in LinkedIn posts and per-keyword limit
+
+    '
   postSearch:
     keywords: []
     maxPostsPerKeyword: 20
@@ -84,45 +136,40 @@ jobPreferences:
     3_days: false
     last_24_hours: false
   positions:
-    - Software Engineer
-    - Full Stack Developer
-    - Frontend Developer
-    - Backend Developer
-    - React Developer
+  - Software Engineer
+  - Frontend Engineer
+  - Software Developer
+  - Frontend Developer
   people_profiles:
-    - Recruiter
-    - Talent Acquisition
-    - Hiring
-    - HR
+  - Recruiter
+  - Talent Acquisition
+  - Hiring
+  - HR
   recruiterKeywords:
-    - recruiter
-    - talent acquisition
-    - hiring
-    - people operations
-    - human resources
-    - ta specialist
-    - sourcer
+  - recruiter
+  - hiring
+  - talent acquisition
   blacklistedEmployeeCounts: []
   blacklistedTitles:
-    - Intern
-    - Director
-    - VP
-    - Principal
-    - Architect
-    - Staff Engineer
-    - QA
-    - Data Scientist
-    - Data Engineer
-    - ML Engineer
-    - DevOps
-    - SRE
-    - Embedded
+  - Intern
+  - Director
+  - VP
+  - Principal
+  - Architect
+  - Staff Engineer
+  - QA
+  - Data Scientist
+  - Data Engineer
+  - ML Engineer
+  - DevOps
+  - SRE
+  - Embedded
   blacklistedDescription:
-    - Walk in
-    - Night Shift
-    - Rotational Shift
-    - 8+ years
-    - 10+ years
+  - Walk in
+  - Night Shift
+  - Rotational Shift
+  - 8+ years
+  - 10+ years
   blacklistedCompanies: []
 gsheet_id: ''
 candidate:
@@ -131,13 +178,23 @@ candidate:
   email: your-email@example.com
   bio_fullstack: Experienced Software Engineer (Node.js, Python, React)
   bio_frontend: Experienced Frontend Engineer (React, Next.js, TypeScript)
-  profile_block: |
-    - 4+ years building scalable web applications and SaaS products.
+  profile_block: '- 4+ years building scalable web applications and SaaS products.
+
     - Frontend: React.js, Next.js, TypeScript, Redux, Tailwind CSS.
+
     - Backend: Node.js, Python, FastAPI, REST APIs, GraphQL.
+
     - DB: PostgreSQL, MongoDB, Redis.
+
     - Cloud: AWS, Docker, CI/CD, GitHub Actions.
+
     - Automation: Selenium, Playwright, test automation.
+
     - Strong product focus, collaboration, and technical ownership.
-  pitch: |
-    I''m a software engineer with 4+ years of experience building scalable web applications and APIs using React, Node.js, Python, and AWS. I enjoy delivering high-quality products and collaborating with cross-functional teams.
+
+    '
+  pitch: 'I''''m a software engineer with 4+ years of experience building scalable
+    web applications and APIs using React, Node.js, Python, and AWS. I enjoy delivering
+    high-quality products and collaborating with cross-functional teams.
+
+    '

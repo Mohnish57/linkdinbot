@@ -37,6 +37,29 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # In-memory bot status
 bot_status = {"state": "idle", "message": "", "progress": ""}
+bot_action_lock = threading.Lock()
+
+CHROME_PROFILE_DIR = PROJECT_ROOT / "linkedinBot" / "chrome-profile"
+
+def _cleanup_chrome_profile():
+    """Kill orphan Chrome instances holding the bot's profile and remove stale lock files."""
+    import subprocess
+    try:
+        subprocess.run(
+            ["pkill", "-9", "-f", f"user-data-dir={CHROME_PROFILE_DIR}"],
+            check=False, capture_output=True,
+        )
+    except FileNotFoundError:
+        pass
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        try:
+            (CHROME_PROFILE_DIR / name).unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+_cleanup_chrome_profile()
 
 def load_config():
     if CONFIG_PATH.exists():
@@ -154,6 +177,13 @@ def run_bot_action(action_name: str, **kwargs):
         try:
             set_status("running", f"Running {action_name}...")
             cfg = load_config()
+
+            if kwargs.get("gemini_key"):
+                os.environ["GEMINI_API_KEY"] = kwargs["gemini_key"]
+            if kwargs.get("gmail_user"):
+                os.environ["GMAIL_USER"] = kwargs["gmail_user"]
+            if kwargs.get("gmail_app_password"):
+                os.environ["GMAIL_APP_PASSWORD"] = kwargs["gmail_app_password"]
             
             # Build resume paths
             resume_paths = {}
@@ -210,28 +240,43 @@ def run_bot_action(action_name: str, **kwargs):
         except Exception as e:
             set_status("error", f"{action_name} failed: {str(e)}")
 
+    with bot_action_lock:
+        if bot_status.get("state") == "running":
+            return False
+        set_status("running", f"Starting {action_name}...")
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
+    return True
+
+def _busy_response():
+    return jsonify({
+        "ok": False,
+        "status": "busy",
+        "error": f"Another action is already running: {bot_status.get('message', '')}",
+    }), 409
 
 @app.route("/api/bot/stage1", methods=["POST"])
 def bot_stage1():
     """Run Stage 1: search jobs."""
     data = request.json or {}
-    run_bot_action("stage1", **data)
+    if not run_bot_action("stage1", **data):
+        return _busy_response()
     return jsonify({"ok": True, "status": "started"})
 
 @app.route("/api/bot/stage2", methods=["POST"])
 def bot_stage2():
     """Run Stage 2: invite recruiters."""
     data = request.json or {}
-    run_bot_action("stage2", **data)
+    if not run_bot_action("stage2", **data):
+        return _busy_response()
     return jsonify({"ok": True, "status": "started"})
 
 @app.route("/api/bot/stage3", methods=["POST"])
 def bot_stage3():
     """Run Stage 3: extract emails."""
     data = request.json or {}
-    run_bot_action("stage3", **data)
+    if not run_bot_action("stage3", **data):
+        return _busy_response()
     return jsonify({"ok": True, "status": "started"})
 
 @app.route("/api/bot/search-posts", methods=["POST"])
@@ -243,14 +288,16 @@ def bot_search_posts():
     payload = dict(data)
     payload.pop("keywords", None)
     payload.pop("max_per_keyword", None)
-    run_bot_action("search_posts", keywords=kw, max_per_keyword=max_per, **payload)
+    if not run_bot_action("search_posts", keywords=kw, max_per_keyword=max_per, **payload):
+        return _busy_response()
     return jsonify({"ok": True, "status": "started"})
 
 @app.route("/api/bot/send-emails-posts", methods=["POST"])
 def bot_send_emails_posts():
     """Send emails to collected post contacts."""
     data = request.json or {}
-    run_bot_action("send_emails_posts", **data)
+    if not run_bot_action("send_emails_posts", **data):
+        return _busy_response()
     return jsonify({"ok": True, "status": "started"})
 
 # ============================================================ Results
@@ -304,4 +351,7 @@ def health():
     return jsonify({"ok": True, "version": "1.0"})
 
 if __name__ == "__main__":
-    app.run(debug=False, port=5000)
+    # Port 5000 is hijacked by macOS AirPlay Receiver (Control Center), so
+    # default to 5001. Override with PORT if needed.
+    port = int(os.environ.get("PORT", 5001))
+    app.run(debug=False, port=port)
