@@ -168,6 +168,12 @@ class LinkedInBot:
             "inviteNoteTemplateHirerFrontend": settings.get(
                 "inviteNoteTemplateHirerFrontend", DEFAULT_INVITE_NOTE_TEMPLATE_HIRER_FRONTEND
             ),
+            "postInviteNoteTemplate": settings.get(
+                "postInviteNoteTemplate",
+                "Hi {name}, I'm {candidate_first_name} — {candidate_bio}. "
+                "Saw your post about the {job_title} role at {company}; I'd love to connect. "
+                "Resume: {resume_link}"
+            ),
             "candidateName": candidate.get("name", DEFAULT_CANDIDATE_NAME),
             "candidateFirstName": candidate.get("first_name", DEFAULT_CANDIDATE_FIRST_NAME),
             "candidateEmail": candidate.get("email", DEFAULT_CANDIDATE_EMAIL),
@@ -780,6 +786,78 @@ class LinkedInBot:
         m = EMAIL_RE.search(text)
         return m.group(0) if m else None
 
+    def _extract_all_emails_from_text(self, text):
+        """Return every distinct email address found in `text`, order-preserved."""
+        if not text:
+            return []
+        seen = []
+        for m in EMAIL_RE.findall(text):
+            addr = m.strip().strip(".,;:)>]")
+            if addr and addr.lower() not in [s.lower() for s in seen]:
+                seen.append(addr)
+        return seen
+
+    def _extract_role_company_from_post(self, text):
+        """Best-effort parse of a job role and company name straight from a post's
+        text. Heuristic only — returns (role, company), either may be "".
+        """
+        if not text:
+            return "", ""
+        # Collapse whitespace and strip out email addresses first, so an address
+        # like "careers@datax.com" can't masquerade as the company name.
+        flat = EMAIL_RE.sub(" ", text)
+        flat = re.sub(r"\s+", " ", flat).strip()
+
+        role = ""
+        company = ""
+
+        # ---- Role: look for common "hiring/looking for <role>" phrasings. -------
+        # Role char class deliberately excludes '.' so a sentence period ends the
+        # match (e.g. "... Analyst position. Apply now" stops at "position").
+        role_chars = r"[A-Za-z0-9/\+\-&'’ ]"
+        role_patterns = [
+            rf"hiring(?:\s+(?:a|an|for|now))?\s*:?\s*({role_chars}{{3,60}}?)(?=\s+(?:at|@|in|for|with|to|\(|[-–—|.,!]|$))",
+            rf"looking for(?:\s+(?:a|an))?\s+({role_chars}{{3,60}}?)(?=\s+(?:at|@|in|for|with|to|\(|[-–—|.,!]|$))",
+            rf"(?:role|position|opening|opportunity|vacancy)\s*:?\s*({role_chars}{{3,60}}?)(?=\s+(?:at|@|in|for|with|\(|[-–—|.,!]|$)|[.])",
+            rf"open(?:ing)?\s+for\s+(?:a|an)?\s*({role_chars}{{3,60}}?)(?=\s+(?:at|@|in|for|with|\(|[-–—|.,!]|$))",
+        ]
+        for pat in role_patterns:
+            m = re.search(pat, flat, re.IGNORECASE)
+            if m:
+                role = m.group(1).strip(" -–—|:,.")
+                break
+
+        # ---- Company: "at <Company>" / "@ <Company>" / "join <Company>". --------
+        # The keyword is case-insensitive, but `(?-i:[A-Z])` forces the company to
+        # start with a real capital so "at the office" / lowercase words don't match.
+        company_patterns = [
+            r"\bat\s+((?-i:[A-Z])[A-Za-z0-9&.\-’' ]{1,40}?)(?=\s*(?:is|are|[-–—|(.,!]|hiring|located|based|$))",
+            r"@\s*((?-i:[A-Z])[A-Za-z0-9&.\-’' ]{1,40}?)(?=\s*(?:is|are|[-–—|(.,!]|$))",
+            r"\bjoin\s+((?-i:[A-Z])[A-Za-z0-9&.\-’' ]{1,40}?)(?=\s*(?:is|are|[-–—|(.,!]|team|$))",
+        ]
+        for pat in company_patterns:
+            m = re.search(pat, flat, re.IGNORECASE)
+            if m:
+                company = m.group(1).strip(" -–—|:,.")
+                break
+
+        return role, company
+
+    def _build_post_invite_note(self, name, role, company, post_link):
+        """Render the connection-invite note used when reaching out to someone who
+        posted a hiring opportunity."""
+        template = self.config.get("postInviteNoteTemplate") or DEFAULT_INVITE_NOTE_TEMPLATE_HIRER
+        return build_invite_note(
+            template,
+            name=name,
+            job_title=role or "the role you posted",
+            company=company,
+            job_link=post_link or "",
+            resume_link=self.config.get("resumeDriveLink", DEFAULT_RESUME_DRIVE_LINK),
+            candidate_first_name=self.config.get("candidateFirstName", DEFAULT_CANDIDATE_FIRST_NAME),
+            candidate_bio=self.config.get("candidateBioFullstack", DEFAULT_CANDIDATE_BIO_FULLSTACK),
+        )
+
     def _send_invite_with_note(self, profile, note):
         """Click Connect on a search-result tile and try to attach a personalised note.
 
@@ -1216,11 +1294,16 @@ class LinkedInBot:
         print(f"Stage 3 done. Total emails on file: {df['email'].notna().sum()}")
 
     # ------------------------------------------------------- post search + emails
-    def search_recent_posts(self, keywords: list[str] | None = None, max_per_keyword: int | None = None, recent_24_hours: bool = True):
-        """Search LinkedIn content (posts) for `keywords` and collect emails found in post text or profile snippets.
+    def search_recent_posts(self, keywords: list[str] | None = None, max_per_keyword: int | None = None, recent_24_hours: bool = True, connect_with_posters: bool | None = None):
+        """Search LinkedIn posts for `keywords`, collect *all* emails mentioned in
+        each post along with the person who posted it (and a best-effort role +
+        company parsed from the post), then automatically send a connection
+        request with a note to each unique poster.
 
-        Writes results to `posts_emails.csv` with columns:
-          keyword, post_link, profile_name, profile_link, post_text, email, email_sent
+        Writes one row per discovered email (plus one row for posters with no
+        email) to `posts_emails.csv` with columns:
+          keyword, post_link, profile_name, profile_link, role, company,
+          post_text, email, connect_status, note_sent, email_sent
         """
         keywords = list(keywords or self.config.get("postSearch", {}).get("keywords", []))
         if not keywords:
@@ -1228,8 +1311,12 @@ class LinkedInBot:
             return
         max_per_keyword = max_per_keyword or self.config.get("postSearch", {}).get("maxPostsPerKeyword", 20)
         max_per_keyword = min(max(int(max_per_keyword), 20), 50)
+        if connect_with_posters is None:
+            connect_with_posters = self.config.get("connectWithPosters", True)
 
-        rows = []
+        # ---------- Pass 1: scrape posts (no navigation away from results) -------
+        scraped = []          # one entry per unique post
+        seen_post_keys = set()
         print(f"Searching posts for keywords: {keywords}")
         for kw in keywords:
             try:
@@ -1239,11 +1326,8 @@ class LinkedInBot:
                     url += "&datePosted=%22past-24h%22"
                 self.driver.get(url)
                 time.sleep(random.uniform(2.5, 4.5))
-                # try scrolling and collecting post tiles
                 collected = 0
-                seen_links = set()
                 for _ in range(6):
-                    # try multiple common selectors for LinkedIn posts
                     candidates = []
                     for sel in ("div.feed-shared-update-v2", "div.occludable-update", "div.search-result__wrapper"):
                         try:
@@ -1255,40 +1339,44 @@ class LinkedInBot:
                             break
                         try:
                             post_text = (post.text or "").strip()
-                            # post link — try anchors that look like posts
                             post_link = None
                             try:
                                 a = post.find_element(By.CSS_SELECTOR, "a[href*='/posts/'], a[href*='/feed/update/']")
                                 post_link = a.get_attribute("href")
                             except Exception:
                                 pass
-                            # profile info
                             profile_name = None
                             profile_link = None
                             try:
                                 actor = post.find_element(By.CSS_SELECTOR, "a.feed-shared-actor__container-link, a.feed-shared-actor__name")
-                                profile_link = actor.get_attribute("href")
+                                profile_link = (actor.get_attribute("href") or "").split("?")[0] or None
                                 profile_name = actor.text.strip()
                             except Exception:
                                 pass
 
-                            email = self._extract_email_from_text(post_text)
-                            # also check visible snippet for emails
-                            if not email and profile_name:
-                                email = self._extract_email_from_text(profile_name)
+                            # All emails mentioned in the post (plus the poster snippet).
+                            emails = self._extract_all_emails_from_text(post_text)
+                            if profile_name:
+                                for e in self._extract_all_emails_from_text(profile_name):
+                                    if e.lower() not in [x.lower() for x in emails]:
+                                        emails.append(e)
 
-                            if post_link and post_link in seen_links:
+                            role, company = self._extract_role_company_from_post(post_text)
+
+                            dedupe_key = post_link or f"{kw}-{collected}"
+                            if dedupe_key in seen_post_keys:
                                 continue
-                            seen_links.add(post_link or f"{kw}-{collected}")
+                            seen_post_keys.add(dedupe_key)
 
-                            rows.append({
+                            scraped.append({
                                 "keyword": kw,
                                 "post_link": post_link,
                                 "profile_name": profile_name,
                                 "profile_link": profile_link,
+                                "role": role,
+                                "company": company,
                                 "post_text": post_text,
-                                "email": email,
-                                "email_sent": False,
+                                "emails": emails,
                             })
                             collected += 1
                         except Exception:
@@ -1302,15 +1390,89 @@ class LinkedInBot:
                 print(f"Search failed for '{kw}': {e}")
                 continue
 
-        # save CSV
-        import pandas as pd
+        # ---------- Pass 2: connect with each unique poster (with a note) -------
+        # Done after scraping so navigating to profiles doesn't invalidate the
+        # search-result elements we were iterating over.
+        connect_map = {}      # profile_link -> {"connect_status": str, "note_sent": bool}
+        if connect_with_posters:
+            limit_hit = False
+            posters = {}
+            for item in scraped:
+                link = item.get("profile_link")
+                if link and "/in/" in link and link not in posters:
+                    posters[link] = item
+            print(f"Sending connection requests to {len(posters)} poster(s)...")
+            for link, item in posters.items():
+                if limit_hit:
+                    connect_map[link] = {"connect_status": "limit", "note_sent": False}
+                    continue
+                if link in self.contacted_profiles:
+                    connect_map[link] = {"connect_status": "already-contacted", "note_sent": False}
+                    continue
+                note = self._build_post_invite_note(
+                    name=item.get("profile_name") or "",
+                    role=item.get("role") or "",
+                    company=item.get("company") or "",
+                    post_link=item.get("post_link") or "",
+                )
+                try:
+                    self.driver.get(link)
+                    time.sleep(random.uniform(3, 5))
+                    # Already a 1st-degree connection?
+                    try:
+                        self.driver.find_element(By.XPATH, "//main//button[.//span[text()='Message']]")
+                        connect_map[link] = {"connect_status": "connected", "note_sent": False}
+                        self.contacted_profiles.add(link)
+                        continue
+                    except NoSuchElementException:
+                        pass
+                    outcome = self._send_invite_from_profile_page(note)
+                except Exception as e:
+                    print(f"Connect failed for {link}: {e}")
+                    connect_map[link] = {"connect_status": "error", "note_sent": False}
+                    continue
+                if outcome == "limit":
+                    print("Weekly invitation limit reached — stopping connection requests.")
+                    limit_hit = True
+                    connect_map[link] = {"connect_status": "limit", "note_sent": False}
+                    continue
+                self.contacted_profiles.add(link)
+                connect_map[link] = {
+                    "connect_status": "pending" if outcome in {"noted", "no-note"} else outcome,
+                    "note_sent": outcome == "noted",
+                }
+                time.sleep(random.uniform(1.5, 3.0))
+
+        # ---------- Build rows: one per email (or one for emailless posters) ----
+        rows = []
+        for item in scraped:
+            link = item.get("profile_link")
+            conn = connect_map.get(link, {"connect_status": "", "note_sent": False})
+            base = {
+                "keyword": item["keyword"],
+                "post_link": item["post_link"],
+                "profile_name": item["profile_name"],
+                "profile_link": link,
+                "role": item["role"],
+                "company": item["company"],
+                "post_text": item["post_text"],
+                "connect_status": conn["connect_status"],
+                "note_sent": conn["note_sent"],
+            }
+            emails = item["emails"] or [None]
+            for email in emails:
+                rows.append({**base, "email": email, "email_sent": False})
 
         df = pd.DataFrame(rows)
         if os.path.exists(POSTS_CSV):
             prev = pd.read_csv(POSTS_CSV)
             df = pd.concat([prev, df], ignore_index=True)
+        # Drop duplicate (email, post_link) pairs accumulated across runs.
+        if "email" in df.columns:
+            df = df.drop_duplicates(subset=["email", "post_link"], keep="first").reset_index(drop=True)
         df.to_csv(POSTS_CSV, index=False)
-        print(f"Saved {len(df)} post records to {POSTS_CSV}")
+        n_emails = int(df["email"].astype(str).str.contains("@", na=False).sum()) if "email" in df.columns else 0
+        print(f"Saved {len(df)} post records ({n_emails} with emails) to {POSTS_CSV}")
 
     def send_emails_for_posts(self, subject_template: str | None = None, body_template: str | None = None, dry_run: bool = False, only_unsent: bool = True):
         """Send emails to addresses found in `posts_emails.csv` using Gmail creds from env.
@@ -1325,9 +1487,13 @@ class LinkedInBot:
         df = pd.read_csv(POSTS_CSV)
         if "email_sent" not in df.columns:
             df["email_sent"] = False
+        # Normalise email_sent to real booleans (CSV round-trips can give "True"/NaN).
+        df["email_sent"] = (
+            df["email_sent"].astype(str).str.strip().str.lower().isin(["true", "1", "yes"])
+        )
         candidates = df[df["email"].astype(str).str.contains("@", na=False)]
         if only_unsent:
-            candidates = candidates[~candidates["email_sent"].astype(bool)]
+            candidates = candidates[~candidates["email_sent"]]
 
         creds = gmail_creds_from_env()
         if not creds:
@@ -1335,17 +1501,26 @@ class LinkedInBot:
             return
 
         sent = 0
+        already_emailed = set()   # lowercased addresses sent this run (dedupe)
         for idx, row in candidates.iterrows():
-            to_addr = (row.get("email") or "").strip()
+            to_addr = (str(row.get("email")) or "").strip()
             if not to_addr or "@" not in to_addr:
                 continue
+            # One email per unique address — skip if we already sent to it now.
+            if to_addr.lower() in already_emailed:
+                df.at[idx, "email_sent"] = True
+                continue
             fields = {
-                "name": (row.get("profile_name") or "there").split()[0],
+                "name": (str(row.get("profile_name")) or "there").split()[0] if row.get("profile_name") else "there",
+                "role": row.get("role") or "this role",
+                "company": row.get("company") or "your company",
+                "job_title": row.get("role") or "this role",
                 **{
                     "candidate_name": self.config.get("candidateName"),
                     "candidate_first_name": self.config.get("candidateFirstName"),
                     "candidate_email": self.config.get("candidateEmail"),
                     "candidate_bio_long": self.config.get("candidateBioFullstack") or "",
+                    "resume_link": self.config.get("resumeDriveLink", DEFAULT_RESUME_DRIVE_LINK),
                 },
             }
             subject = (subject_template or self.config.get("emailSubjectTemplate") or "Hello")
@@ -1359,19 +1534,22 @@ class LinkedInBot:
             if dry_run:
                 print(f"[dry-run] Would send to {to_addr}: {rendered_subject}")
                 sent += 1
+                already_emailed.add(to_addr.lower())
                 df.at[idx, "email_sent"] = True
                 continue
 
             try:
                 send_one(creds=creds, to_addr=to_addr, subject=rendered_subject, body=rendered_body, from_name=self.config.get("candidateName"))
-                df.at[idx, "email_sent"] = True
+                already_emailed.add(to_addr.lower())
+                # Mark every row sharing this address as sent.
+                df.loc[df["email"].astype(str).str.lower() == to_addr.lower(), "email_sent"] = True
                 sent += 1
                 df.to_csv(POSTS_CSV, index=False)
                 print(f"Sent email to {to_addr}")
             except Exception as e:
                 print(f"Failed to send to {to_addr}: {e}")
 
-        print(f"Email send complete. Sent: {sent}")
+        print(f"Email send complete. Sent to {sent} unique address(es).")
 
     def _read_contact_info_email(self):
         """On the currently-loaded profile, open the Contact Info overlay

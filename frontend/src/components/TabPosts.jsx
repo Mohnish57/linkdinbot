@@ -75,10 +75,39 @@ function TabPosts({ config, saveConfig, status, apiUrl }) {
     }
   };
 
+  const isSent = (v) => v === true || String(v).toLowerCase() === 'true';
+
+  const renderConnect = (statusRaw, noteSent) => {
+    const status = (statusRaw || '').toString().toLowerCase();
+    if (!status) return '—';
+    if (status === 'pending') return isSent(noteSent) ? '✉️ Invited (note)' : '✉️ Invited';
+    if (status === 'connected' || status === 'already-contacted') return '✔ Connected';
+    if (status === 'limit') return '⛔ Weekly limit';
+    if (status === 'error') return '⚠️ Failed';
+    return status;
+  };
+
+  // Unique email addresses across all collected rows (case-insensitive).
+  const uniqueEmails = [...new Set(
+    posts.map(p => (p.email || '').toString().trim().toLowerCase()).filter(e => e.includes('@'))
+  )];
+  const uniqueEmailCount = uniqueEmails.length;
+  const unsentEmailCount = [...new Set(
+    posts.filter(p => !isSent(p.email_sent)).map(p => (p.email || '').toString().trim().toLowerCase()).filter(e => e.includes('@'))
+  )].length;
+
+  const sendEmailsWithConfirm = (dryRunMode) => {
+    if (!dryRunMode) {
+      const ok = window.confirm(`Send your email to ${unsentEmailCount} unique address(es)? Already-emailed contacts are skipped.`);
+      if (!ok) return;
+    }
+    sendEmails(dryRunMode);
+  };
+
   return (
     <div>
       <h2 className="heading-with-icon"><Icon name="document" /> Search posts & outreach</h2>
-      <p>Search recent LinkedIn posts by keyword, collect emails found, and send outreach.</p>
+      <p>Search recent LinkedIn posts by keyword. The bot collects <strong>every email</strong> mentioned in each post plus the person who posted it, parses the role &amp; company, and <strong>automatically sends each poster a connection request with a note</strong>. Then email all collected addresses below.</p>
 
       <div style={{ marginTop: '20px' }}>
         <label><strong>Keywords (comma-separated)</strong></label>
@@ -131,23 +160,31 @@ function TabPosts({ config, saveConfig, status, apiUrl }) {
 
       {posts.length > 0 && (
         <div style={{ marginTop: '25px' }}>
-          <h3>Collected posts & emails ({posts.length})</h3>
+          <h3>Collected emails ({uniqueEmailCount} unique) · {posts.length} rows</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9em' }}>
             <thead>
               <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #ddd' }}>
-                <th style={{ textAlign: 'left', padding: '8px' }}>Keyword</th>
                 <th style={{ textAlign: 'left', padding: '8px' }}>Profile</th>
+                <th style={{ textAlign: 'left', padding: '8px' }}>Role</th>
+                <th style={{ textAlign: 'left', padding: '8px' }}>Company</th>
                 <th style={{ textAlign: 'left', padding: '8px' }}>Email</th>
-                <th style={{ textAlign: 'left', padding: '8px' }}>Sent</th>
+                <th style={{ textAlign: 'left', padding: '8px' }}>Connect</th>
+                <th style={{ textAlign: 'left', padding: '8px' }}>Emailed</th>
               </tr>
             </thead>
             <tbody>
               {posts.slice(0, 20).map((p, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '8px' }}>{p.keyword}</td>
-                  <td style={{ padding: '8px' }}>{p.profile_name}</td>
+                  <td style={{ padding: '8px' }}>
+                    {p.profile_link
+                      ? <a href={p.profile_link} target="_blank" rel="noreferrer">{p.profile_name || 'Profile'}</a>
+                      : (p.profile_name || '—')}
+                  </td>
+                  <td style={{ padding: '8px' }}>{p.role || '—'}</td>
+                  <td style={{ padding: '8px' }}>{p.company || '—'}</td>
                   <td style={{ padding: '8px' }}>{p.email || '—'}</td>
-                  <td style={{ padding: '8px' }}>{p.email_sent ? <span className="inline-status"><Icon name="check" size={14} /> Sent</span> : '—'}</td>
+                  <td style={{ padding: '8px' }}>{renderConnect(p.connect_status, p.note_sent)}</td>
+                  <td style={{ padding: '8px' }}>{isSent(p.email_sent) ? <span className="inline-status"><Icon name="check" size={14} /> Sent</span> : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -190,7 +227,7 @@ function TabPosts({ config, saveConfig, status, apiUrl }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '15px' }}>
           <button
-            onClick={() => sendEmails(true)}
+            onClick={() => sendEmailsWithConfirm(true)}
             disabled={status.state === 'running'}
             style={{
               padding: '10px',
@@ -205,20 +242,20 @@ function TabPosts({ config, saveConfig, status, apiUrl }) {
             <span className="button-with-icon"><Icon name="eye" size={16} /> Dry run</span>
           </button>
           <button
-            onClick={() => sendEmails(false)}
-            disabled={status.state === 'running' || !localStorage.getItem('gmail_user')}
+            onClick={() => sendEmailsWithConfirm(false)}
+            disabled={status.state === 'running' || !localStorage.getItem('gmail_user') || unsentEmailCount === 0}
             style={{
               padding: '10px',
               background: '#388e3c',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
-              cursor: status.state === 'running' || !localStorage.getItem('gmail_user') ? 'not-allowed' : 'pointer',
-              opacity: status.state === 'running' || !localStorage.getItem('gmail_user') ? 0.6 : 1,
+              cursor: status.state === 'running' || !localStorage.getItem('gmail_user') || unsentEmailCount === 0 ? 'not-allowed' : 'pointer',
+              opacity: status.state === 'running' || !localStorage.getItem('gmail_user') || unsentEmailCount === 0 ? 0.6 : 1,
               fontWeight: 'bold',
             }}
           >
-            <span className="button-with-icon"><Icon name="send" size={16} /> Send now</span>
+            <span className="button-with-icon"><Icon name="send" size={16} /> Send to all emails ({unsentEmailCount})</span>
           </button>
         </div>
       </div>
