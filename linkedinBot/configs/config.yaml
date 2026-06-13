@@ -117,7 +117,10 @@ settings:
 
     '
   postSearch:
-    keywords: []
+    keywords:
+    - frontend developer
+    - full stack developer
+    - lead frontend developer
     maxPostsPerKeyword: 20
     recent24Hours: true
 jobPreferences:

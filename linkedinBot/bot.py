@@ -62,6 +62,22 @@ os.makedirs(CHROME_PROFILE_DIR, exist_ok=True)
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 
+# Phrases that mark a post as a JOB-SEEKER / "open to work" post rather than a
+# hiring post. If any appears, we skip the post (never connect to candidates).
+DEFAULT_SEEKER_PHRASES = [
+    "open to work", "#opentowork", "opentowork",
+    "looking for opportunities", "looking for a new opportunity",
+    "looking for new opportunities", "looking for an opportunity",
+    "looking for a job", "looking for job", "looking for a role",
+    "i'm looking for", "i am looking for", "im looking for",
+    "i'm currently looking", "i am currently looking", "currently looking for",
+    "seeking opportunities", "seeking new opportunities", "seeking a new role",
+    "in search of", "open for opportunities", "open to opportunities",
+    "open to new opportunities", "actively seeking", "actively looking for",
+    "please refer me", "kindly refer", "refer me",
+    "looking for referral", "looking for referrals", "need a referral",
+]
+
 
 class LinkedInBot:
     def __init__(self, headless=False, resume_path=None, resume_paths=None, config_overrides=None):
@@ -168,6 +184,7 @@ class LinkedInBot:
             "inviteNoteTemplateHirerFrontend": settings.get(
                 "inviteNoteTemplateHirerFrontend", DEFAULT_INVITE_NOTE_TEMPLATE_HIRER_FRONTEND
             ),
+            "postSearch": settings.get("postSearch", {}),
             "postInviteNoteTemplate": settings.get(
                 "postInviteNoteTemplate",
                 "Hi {name}, I'm {candidate_first_name} — {candidate_bio}. "
@@ -1175,75 +1192,305 @@ class LinkedInBot:
             "is_hirer": True,
         }, False
 
+    def _dump_connect_debug(self, reason):
+        """Save the current page (HTML + screenshot) once per run so the Connect
+        flow can be refined when LinkedIn changes its profile DOM."""
+        print(f"  [_dump_connect_debug] reason={reason}", flush=True)
+        if getattr(self, "_connect_dumped", False):
+            return
+        self._connect_dumped = True
+        try:
+            with open(os.path.join(OUTPUT_DIR, "connect_debug.html"), "w") as f:
+                f.write(self.driver.page_source or "")
+            self.driver.save_screenshot(os.path.join(OUTPUT_DIR, "connect_debug.png"))
+            print(f"  (connect debug saved to output/connect_debug.*)", flush=True)
+        except Exception as e:
+            print(f"  (connect debug dump failed: {e})", flush=True)
+
+    def _click_el(self, el):
+        """Robust click — fall back to a JS click when the element is obscured."""
+        try:
+            el.click()
+        except Exception:
+            self.driver.execute_script("arguments[0].click();", el)
+
+    @staticmethod
+    def _xp_literal(s):
+        """Quote an arbitrary string for use as an XPath string literal
+        (handles names containing quotes/apostrophes)."""
+        if '"' not in s:
+            return f'"{s}"'
+        if "'" not in s:
+            return f"'{s}'"
+        return "concat('" + s.replace("'", "', \"'\", '") + "')"
+
+    def _profile_owner_name(self):
+        """The profile owner's display name. The new DOM has no <h1>, but the
+        document title is "<Name> | LinkedIn" (sometimes "(N) <Name> | LinkedIn")."""
+        try:
+            t = (self.driver.title or "").strip()
+            t = re.sub(r'^\(\d+\)\s*', '', t)      # drop "(3) " notification prefix
+            if "|" in t:
+                t = t.split("|")[0].strip()
+            if t and t.lower() != "linkedin":
+                return t
+        except Exception:
+            pass
+        try:
+            return self.driver.find_element(By.CSS_SELECTOR, "main h1, h1").text.strip()
+        except Exception:
+            return ""
+
+    def _open_connect_dialog(self):
+        """Click Connect for the PROFILE OWNER, either directly on the top card or
+        via the "More" (3-dots) overflow menu — then the caller attaches the note.
+
+        We scope strictly to the owner (matched by name) so we never click the
+        "People you may know" quick-invite buttons elsewhere on the page. Classes
+        are hashed/obfuscated, so we match on aria-label and visible text only.
+        """
+        owner = self._profile_owner_name()
+        inv_label = f"Invite {owner} to connect" if owner else None
+        print(f"  [connect] owner={owner!r}", flush=True)
+
+        # 1) Direct owner Connect button on the top card (precise to the owner).
+        direct = []
+        if inv_label:
+            direct.append(f"//button[@aria-label={self._xp_literal(inv_label)}]")
+        # Generic top-card Connect immediately after the owner's <h1>.
+        direct.append("//h1/following::button[.//span[normalize-space()='Connect']][1]")
+        for xp in direct:
+            try:
+                btn = self.driver.find_element(By.XPATH, xp)
+                self._click_el(btn)
+                print("  [connect] clicked direct owner Connect", flush=True)
+                return True
+            except Exception:
+                continue
+
+        # 2) Open the owner's "More" overflow menu, then click Connect inside it.
+        item_xps = []
+        if inv_label:
+            item_xps.append(f"//*[@aria-label={self._xp_literal(inv_label)}]")
+        item_xps += [
+            "//div[@role='menu']//*[normalize-space()='Connect']",
+            "//*[@role='menuitem'][contains(normalize-space(.), 'Connect')]",
+            "//div[contains(@class,'dropdown') or @role='menu']//span[normalize-space()='Connect']",
+        ]
+        try:
+            more_btns = self.driver.find_elements(By.XPATH, "//button[@aria-label='More']")
+        except Exception:
+            more_btns = []
+        for mi, mb in enumerate(more_btns):
+            try:
+                self._click_el(mb)
+                time.sleep(random.uniform(0.9, 1.6))
+            except Exception:
+                continue
+            # Log what the just-opened menu actually offers (useful diagnostics).
+            try:
+                opts = []
+                for el in self.driver.find_elements(
+                        By.XPATH, "//div[@role='menu']//*[self::span or self::div][normalize-space()][string-length(normalize-space())<40]"):
+                    txt = (el.text or "").strip()
+                    if txt and txt not in opts:
+                        opts.append(txt)
+                if opts:
+                    print(f"  [connect] More#{mi} menu options: {opts[:12]}", flush=True)
+            except Exception:
+                pass
+            for cxp in item_xps:
+                try:
+                    item = self.driver.find_element(By.XPATH, cxp)
+                except Exception:
+                    continue
+                # Clicking the inner <span> often doesn't fire the menu item —
+                # resolve to the nearest clickable (menuitem / button / a) ancestor.
+                target = item
+                try:
+                    target = item.find_element(
+                        By.XPATH, "./ancestor-or-self::*[@role='menuitem' or @role='button' or self::button or self::a][1]")
+                except Exception:
+                    pass
+                self._click_el(target)
+                print("  [connect] clicked Connect via More menu", flush=True)
+                return True
+            # Close this menu before trying the next "More" button.
+            try:
+                self.driver.switch_to.active_element.send_keys(Keys.ESCAPE)
+                time.sleep(0.4)
+            except Exception:
+                pass
+        return False
+
     def _send_invite_from_profile_page(self, note):
         """Click Connect on the currently-loaded profile page and try to attach
         a personalised note. Same return contract as _send_invite_with_note.
         """
-        try:
-            connect_btn = self.driver.find_element(
-                By.XPATH, "//main//button[.//span[text()='Connect']]"
-            )
-            connect_btn.click()
-        except NoSuchElementException:
-            # Try opening the "More" dropdown and finding Connect there.
+        if not self._open_connect_dialog():
+            self._dump_connect_debug("no-connect-button")
+            return "skipped"
+
+        # The invite modal is a native <dialog> rendered inside an about:blank
+        # iframe, with buttons matched by visible TEXT (classes are obfuscated).
+        # So we try the main document first, then each iframe.
+        time.sleep(random.uniform(1.5, 2.2))
+        want_note = bool(self.config.get("sendInviteNote", True) and note)
+
+        outcome = self._complete_invite_in_context(note, want_note)
+        if outcome:
+            return outcome
+        for fr in self.driver.find_elements(By.TAG_NAME, "iframe"):
             try:
-                more_btn = self.driver.find_element(
-                    By.XPATH, "//main//button[contains(@aria-label, 'More actions')]"
-                )
-                more_btn.click()
-                time.sleep(random.uniform(1, 1.8))
-                self.driver.find_element(
-                    By.XPATH, "//div[@role='menu']//span[text()='Connect']"
-                ).click()
+                self.driver.switch_to.frame(fr)
+                outcome = self._complete_invite_in_context(note, want_note)
             except Exception:
-                return "skipped"
+                outcome = None
+            finally:
+                self.driver.switch_to.default_content()
+            if outcome:
+                return outcome
 
-        time.sleep(random.uniform(1.5, 2.5))
+        self._dump_connect_debug("no-dialog")
+        return "pending-no-button"
+
+    _JS_DEEP_BUTTON = r"""
+const wants = arguments[0].map(s => s.toLowerCase());
+const hit = (e) => {
+  const t = (e.textContent || '').replace(/\s+/g,' ').trim().toLowerCase();
+  let al = '';
+  try { al = (e.getAttribute('aria-label') || '').trim().toLowerCase(); } catch (x) {}
+  return wants.some(w => t === w || al === w);
+};
+const visit = (root) => {
+  let btns; try { btns = root.querySelectorAll('button,[role=button]'); } catch (x) { btns = []; }
+  for (const e of btns) if (hit(e)) return e;
+  let all; try { all = root.querySelectorAll('*'); } catch (x) { all = []; }
+  for (const e of all) if (e.shadowRoot) { const r = visit(e.shadowRoot); if (r) return r; }
+  return null;
+};
+return visit(document);
+"""
+    _JS_DEEP_FIELD = r"""
+const visit = (root) => {
+  let f; try { f = root.querySelector('textarea,[contenteditable="true"],[role="textbox"]'); } catch (x) { f = null; }
+  if (f) return f;
+  let all; try { all = root.querySelectorAll('*'); } catch (x) { all = []; }
+  for (const e of all) if (e.shadowRoot) { const r = visit(e.shadowRoot); if (r) return r; }
+  return null;
+};
+return visit(document);
+"""
+
+    def _deep_find_button(self, texts):
+        """Recursively search the document AND open shadow roots for a button whose
+        text/aria-label exactly matches one of `texts`. Returns a WebElement or None."""
         try:
-            modal = WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div[role='dialog']"))
-            )
-        except TimeoutException:
-            return "pending-no-button"
+            return self.driver.execute_script(self._JS_DEEP_BUTTON, texts)
+        except Exception:
+            return None
 
-        if "invitation limit" in (modal.text or "").lower() or "You've reached the weekly" in (modal.text or ""):
-            return "limit"
-
-        if not self.config.get("sendInviteNote", True) or not note:
-            try:
-                modal.find_element(
-                    By.XPATH, ".//button[.//span[text()='Send without a note'] or @aria-label='Send now']"
-                ).click()
-                return "no-note"
-            except Exception:
-                return "skipped"
-
-        # Click "Add a note" if present
+    def _deep_find_field(self):
         try:
-            modal.find_element(By.XPATH, ".//button[.//span[text()='Add a note']]").click()
-            time.sleep(random.uniform(0.8, 1.4))
-        except NoSuchElementException:
+            return self.driver.execute_script(self._JS_DEEP_FIELD)
+        except Exception:
+            return None
+
+    def _complete_invite_in_context(self, note, want_note):
+        """Within the current frame context, drive the invite <dialog>: optionally
+        "Add a note" → type → "Send"; else "Send without a note". Returns
+        "noted"/"no-note"/"limit" if it acted here, or None if no modal is present."""
+        add_note_xps = [
+            "//button[normalize-space()='Add a note']",
+            "//button[.//span[normalize-space()='Add a note']]",
+            "//button[@aria-label='Add a note']",
+        ]
+        send_xps = [
+            "//button[normalize-space()='Send invitation']",
+            "//button[@aria-label='Send invitation']",
+            "//button[normalize-space()='Send']",
+            "//button[.//span[normalize-space()='Send']]",
+        ]
+        send_wo_xps = [
+            "//button[normalize-space()='Send without a note']",
+            "//button[.//span[normalize-space()='Send without a note']]",
+            "//button[@aria-label='Send without a note']",
+        ]
+
+        def _present(xps):
+            for xp in xps:
+                els = self.driver.find_elements(By.XPATH, xp)
+                if els:
+                    return els[0]
+            return None
+
+        # Deep (shadow-piercing) button finders — LinkedIn renders the invite
+        # <dialog> inside shadow roots that XPath/page_source can't see.
+        add_note_texts = ["add a note"]
+        send_texts = ["send invitation", "send"]
+        send_wo_texts = ["send without a note"]
+
+        def _click_text(texts, xps):
+            el = self._deep_find_button(texts) or _present(xps)
+            if el is None:
+                return False
+            self._click_el(el)
+            return True
+
+        # Is the invite modal present in this context (light DOM or shadow)?
+        has_modal = bool(
+            self.driver.find_elements(By.CSS_SELECTOR, "dialog")
+            or _present(add_note_xps) or _present(send_wo_xps)
+            or self._deep_find_button(add_note_texts)
+            or self._deep_find_button(send_wo_texts)
+        )
+        if not has_modal:
+            return None
+
+        # Weekly-limit guard.
+        try:
+            body_txt = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+            if "invitation limit" in body_txt or "you've reached the weekly" in body_txt:
+                return "limit"
+        except Exception:
             pass
 
-        try:
-            textarea = WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "div[role='dialog'] textarea"))
-            )
-            textarea.clear()
-            textarea.send_keys(note[:INVITE_NOTE_MAX])
-            time.sleep(random.uniform(0.5, 1.0))
-            self.driver.find_element(
-                By.XPATH, "//div[@role='dialog']//button[.//span[text()='Send'] or @aria-label='Send now']"
-            ).click()
-            return "noted"
-        except Exception:
-            try:
-                self.driver.find_element(
-                    By.XPATH, "//div[@role='dialog']//button[.//span[text()='Send without a note']]"
-                ).click()
+        if want_note:
+            if _click_text(add_note_texts, add_note_xps):
+                print("  [connect] clicked 'Add a note'", flush=True)
+                time.sleep(random.uniform(0.8, 1.4))
+            # Type into the note field (textarea / contenteditable), shadow-aware.
+            field = self._deep_find_field()
+            if field is None:
+                for sel in ("textarea#custom-message", "textarea[name='message']",
+                            "dialog textarea", "textarea", "div[contenteditable='true']"):
+                    els = self.driver.find_elements(By.CSS_SELECTOR, sel)
+                    if els:
+                        field = els[0]
+                        break
+            if field is not None:
+                try:
+                    field.clear()
+                except Exception:
+                    pass
+                try:
+                    field.send_keys(note[:INVITE_NOTE_MAX])
+                    print(f"  [connect] typed note ({len(note[:INVITE_NOTE_MAX])} chars)", flush=True)
+                    time.sleep(random.uniform(0.5, 1.0))
+                    if _click_text(send_texts, send_xps):
+                        print("  [connect] clicked Send (with note)", flush=True)
+                        return "noted"
+                except Exception as e:
+                    print(f"  [connect] note typing failed: {e}", flush=True)
+            # Couldn't attach the note — send without it rather than abandon.
+            if _click_text(send_wo_texts, send_wo_xps) or _click_text(send_texts, send_xps):
                 return "no-note"
-            except Exception:
-                return "skipped"
+            return None
+
+        # Note disabled — send without one.
+        if _click_text(send_wo_texts, send_wo_xps) or _click_text(send_texts, send_xps):
+            return "no-note"
+        return None
 
     def _append_connection_row(self, record):
         self.df_connections = pd.concat(
@@ -1313,12 +1560,48 @@ class LinkedInBot:
         max_per_keyword = min(max(int(max_per_keyword), 20), 50)
         if connect_with_posters is None:
             connect_with_posters = self.config.get("connectWithPosters", True)
+        # A post must signal hiring intent to count as a job post (not a random update).
+        ps_cfg = self.config.get("postSearch", {}) or {}
+        must_include = [
+            str(p).lower() for p in ps_cfg.get("mustInclude", ["hiring", "looking for"])
+        ] or ["hiring", "looking for"]
+        # ...and must NOT look like a job-seeker / "open to work" post — we only
+        # want to reach people who are HIRING, never candidates seeking jobs.
+        must_exclude = [
+            str(p).lower() for p in ps_cfg.get("mustExclude", DEFAULT_SEEKER_PHRASES)
+        ]
 
         # ---------- Pass 1: scrape posts (no navigation away from results) -------
+        # Diagnostics persisted to output/posts_debug.json so a 0-result run can
+        # be understood without watching the browser (stdout is block-buffered).
+        debug = {"keywords": keywords, "recent_24_hours": recent_24_hours, "per_keyword": []}
         scraped = []          # one entry per unique post
         seen_post_keys = set()
-        print(f"Searching posts for keywords: {keywords}")
+        print(f"Searching posts for keywords: {keywords}", flush=True)
+
+        try:
+            debug["logged_in"] = bool(self._is_logged_in())
+        except Exception:
+            debug["logged_in"] = None
+
+        # Broad, class-agnostic selectors. `data-urn`/`data-id` carrying an
+        # activity URN survives LinkedIn's frequent CSS class churn.
+        TILE_SELECTORS = (
+            "div[data-urn*='urn:li:activity']",
+            "div[data-id*='urn:li:activity']",
+            "div.feed-shared-update-v2",
+            "div.update-components-update-v2",
+            "div.occludable-update",
+            "div.search-result__wrapper",
+            # LinkedIn now serves content-search results as obfuscated <li>s with
+            # hashed class names and no activity URN, rendered OUTSIDE <main>.
+            # Fall back to every <li> and filter by content (actor link +
+            # substantial text) below.
+            "li",
+        )
+
         for kw in keywords:
+            kw_dbg = {"keyword": kw, "auth_wall": False, "raw_tiles": 0, "collected": 0, "sample": ""}
             try:
                 q = quote_plus(kw)
                 url = f"https://www.linkedin.com/search/results/content/?keywords={q}&origin=GLOBAL_SEARCH_HEADER"
@@ -1326,51 +1609,130 @@ class LinkedInBot:
                     url += "&datePosted=%22past-24h%22"
                 self.driver.get(url)
                 time.sleep(random.uniform(2.5, 4.5))
+
+                # Auth/login wall detection.
+                cur = (self.driver.current_url or "").lower()
+                if any(x in cur for x in ("/login", "authwall", "/checkpoint", "/uas/")):
+                    kw_dbg["auth_wall"] = True
+                    kw_dbg["landed_url"] = cur
+                    print(f"  • {kw}: hit a login/auth wall ({cur}) — not logged in", flush=True)
+                    debug["per_keyword"].append(kw_dbg)
+                    continue
+
+                # Actor-anchored scraping. LinkedIn's content-search DOM has no
+                # stable post container (hashed classes, no role/article, no URN),
+                # but every post has an actor profile link. So we start from each
+                # `/in/` link and climb to the enclosing post container.
                 collected = 0
+                max_raw = 0
+                seen_containers = set()
                 for _ in range(6):
-                    candidates = []
-                    for sel in ("div.feed-shared-update-v2", "div.occludable-update", "div.search-result__wrapper"):
-                        try:
-                            candidates.extend(self.driver.find_elements(By.CSS_SELECTOR, sel))
-                        except Exception:
-                            continue
-                    for post in candidates:
+                    try:
+                        actors = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/in/']")
+                    except Exception:
+                        actors = []
+                    max_raw = max(max_raw, len(actors))
+
+                    for actor in actors:
                         if collected >= max_per_keyword:
                             break
                         try:
-                            post_text = (post.text or "").strip()
-                            post_link = None
-                            try:
-                                a = post.find_element(By.CSS_SELECTOR, "a[href*='/posts/'], a[href*='/feed/update/']")
-                                post_link = a.get_attribute("href")
-                            except Exception:
-                                pass
+                            href = (actor.get_attribute("href") or "").split("?")[0]
+                            if "/in/" not in href:
+                                continue
+
+                            # Climb to the largest single-post ancestor: keep going
+                            # up while the subtree text stays within one post's worth;
+                            # stop before we reach the multi-post feed wrapper.
+                            el = actor
+                            container = None
+                            for _ in range(15):
+                                try:
+                                    el = el.find_element(By.XPATH, "./..")
+                                    t = el.text or ""
+                                except Exception:
+                                    break
+                                if len(t) > 2200:
+                                    break
+                                container = el
+                            if container is None:
+                                continue
+                            cid = container.id
+                            if cid in seen_containers:
+                                continue
+                            seen_containers.add(cid)
+
+                            post_text = (container.text or "").strip()
+                            if len(post_text) < 60:
+                                continue
+
+                            # Keep only genuine job posts: the text must mention a
+                            # hiring intent (settings.postSearch.mustInclude) and must
+                            # NOT read like a job-seeker post (mustExclude).
+                            low_text = post_text.lower()
+                            if not any(p in low_text for p in must_include):
+                                continue
+                            if any(x in low_text for x in must_exclude):
+                                print(f"  [skip] job-seeker post: {post_text[:60]!r}", flush=True)
+                                continue
+
+                            # Author = first /in/ link inside the container.
+                            profile_link = href
                             profile_name = None
-                            profile_link = None
                             try:
-                                actor = post.find_element(By.CSS_SELECTOR, "a.feed-shared-actor__container-link, a.feed-shared-actor__name")
-                                profile_link = (actor.get_attribute("href") or "").split("?")[0] or None
-                                profile_name = actor.text.strip()
+                                a0 = container.find_element(By.CSS_SELECTOR, "a[href*='/in/']")
+                                profile_link = (a0.get_attribute("href") or "").split("?")[0] or href
+                                name = (a0.text or "").strip().split("\n")[0].strip()
+                                if not name:
+                                    try:
+                                        name = a0.find_element(By.CSS_SELECTOR, "span[aria-hidden='true']").text.strip()
+                                    except Exception:
+                                        name = ""
+                                profile_name = name or None
                             except Exception:
                                 pass
 
-                            # All emails mentioned in the post (plus the poster snippet).
-                            emails = self._extract_all_emails_from_text(post_text)
-                            if profile_name:
-                                for e in self._extract_all_emails_from_text(profile_name):
-                                    if e.lower() not in [x.lower() for x in emails]:
-                                        emails.append(e)
+                            # The actor anchor often has no visible text (avatar
+                            # only). Recover the name from the post header, which
+                            # reads "Feed post\n<Name>\n  • <degree>\n<headline>…".
+                            lines = [ln.strip() for ln in post_text.split("\n") if ln.strip()]
+                            if not profile_name and lines:
+                                hdr = None
+                                for i, ln in enumerate(lines):
+                                    if ln.lower() == "feed post" and i + 1 < len(lines):
+                                        hdr = lines[i + 1]
+                                        break
+                                profile_name = hdr or lines[0]
 
-                            role, company = self._extract_role_company_from_post(post_text)
-
-                            dedupe_key = post_link or f"{kw}-{collected}"
+                            # Dedupe distinct posts by poster + first line of text.
+                            dedupe_key = f"{profile_link}|{post_text[:80]}"
                             if dedupe_key in seen_post_keys:
                                 continue
                             seen_post_keys.add(dedupe_key)
 
+                            # Emails from the container's HTML (incl. mailto: and text
+                            # collapsed behind "…more"), not just the visible text.
+                            try:
+                                tile_html = container.get_attribute("outerHTML") or ""
+                            except Exception:
+                                tile_html = ""
+                            emails = self._extract_all_emails_from_text(
+                                post_text + "\n" + tile_html.replace("mailto:", " ")
+                            )
+
+                            # Role/company come from the POST BODY, not the poster's
+                            # job headline. The body starts after the "Follow" line.
+                            body = post_text
+                            if "\nFollow\n" in post_text:
+                                body = post_text.split("\nFollow\n", 1)[1]
+                            role, company = self._extract_role_company_from_post(body)
+
+                            if not kw_dbg["sample"]:
+                                kw_dbg["sample"] = post_text[:200]
+
                             scraped.append({
                                 "keyword": kw,
-                                "post_link": post_link,
+                                "post_link": None,
                                 "profile_name": profile_name,
                                 "profile_link": profile_link,
                                 "role": role,
@@ -1385,10 +1747,53 @@ class LinkedInBot:
                         break
                     self.scroll_down_page(30)
                     time.sleep(random.uniform(1.2, 2.2))
-                print(f"  • {kw}: collected {collected} posts")
+
+                kw_dbg["raw_tiles"] = max_raw
+                kw_dbg["collected"] = collected
+
+                # When nothing was collected, capture the page so we can see WHY
+                # (no-results state, different DOM, blocked, etc.).
+                if collected == 0:
+                    try:
+                        kw_dbg["landed_url"] = self.driver.current_url
+                        kw_dbg["page_title"] = self.driver.title
+                    except Exception:
+                        pass
+                    try:
+                        body = self.driver.find_element(By.TAG_NAME, "body").text or ""
+                        kw_dbg["body_sample"] = body[:1200]
+                    except Exception:
+                        kw_dbg["body_sample"] = ""
+                    probe = {
+                        "li": "li",
+                        "div[role=article]": "div[role='article']",
+                        "search-results-container": "div.search-results-container",
+                        "scaffold-finite-scroll": "div.scaffold-finite-scroll__content",
+                        "feed-shared-update": "div.feed-shared-update-v2",
+                        "update-components": "div.update-components-update-v2",
+                        "no-results": "div.search-reusables__no-results, div.search-no-results",
+                    }
+                    counts = {}
+                    for label, sel in probe.items():
+                        try:
+                            counts[label] = len(self.driver.find_elements(By.CSS_SELECTOR, sel))
+                        except Exception:
+                            counts[label] = -1
+                    kw_dbg["selector_counts"] = counts
+                    # Save a screenshot + HTML for the first failing keyword only.
+                    if not debug.get("_dumped"):
+                        debug["_dumped"] = True
+                        try:
+                            self.driver.save_screenshot(os.path.join(OUTPUT_DIR, "posts_debug.png"))
+                            with open(os.path.join(OUTPUT_DIR, "posts_debug.html"), "w") as hf:
+                                hf.write(self.driver.page_source or "")
+                        except Exception:
+                            pass
+                print(f"  • {kw}: {max_raw} tiles on page, collected {collected} posts", flush=True)
             except Exception as e:
-                print(f"Search failed for '{kw}': {e}")
-                continue
+                kw_dbg["error"] = str(e)
+                print(f"Search failed for '{kw}': {e}", flush=True)
+            debug["per_keyword"].append(kw_dbg)
 
         # ---------- Pass 2: connect with each unique poster (with a note) -------
         # Done after scraping so navigating to profiles doesn't invalidate the
@@ -1401,12 +1806,13 @@ class LinkedInBot:
                 link = item.get("profile_link")
                 if link and "/in/" in link and link not in posters:
                     posters[link] = item
-            print(f"Sending connection requests to {len(posters)} poster(s)...")
+            print(f"Sending connection requests to {len(posters)} poster(s)...", flush=True)
             for link, item in posters.items():
                 if limit_hit:
                     connect_map[link] = {"connect_status": "limit", "note_sent": False}
                     continue
                 if link in self.contacted_profiles:
+                    print(f"  connect[{link}] -> already-contacted", flush=True)
                     connect_map[link] = {"connect_status": "already-contacted", "note_sent": False}
                     continue
                 note = self._build_post_invite_note(
@@ -1421,14 +1827,16 @@ class LinkedInBot:
                     # Already a 1st-degree connection?
                     try:
                         self.driver.find_element(By.XPATH, "//main//button[.//span[text()='Message']]")
+                        print(f"  connect[{link}] -> connected (Message button present)", flush=True)
                         connect_map[link] = {"connect_status": "connected", "note_sent": False}
                         self.contacted_profiles.add(link)
                         continue
                     except NoSuchElementException:
                         pass
                     outcome = self._send_invite_from_profile_page(note)
+                    print(f"  connect[{link}] -> {outcome}", flush=True)
                 except Exception as e:
-                    print(f"Connect failed for {link}: {e}")
+                    print(f"  connect[{link}] -> EXCEPTION {e}", flush=True)
                     connect_map[link] = {"connect_status": "error", "note_sent": False}
                     continue
                 if outcome == "limit":
@@ -1464,15 +1872,33 @@ class LinkedInBot:
                 rows.append({**base, "email": email, "email_sent": False})
 
         df = pd.DataFrame(rows)
-        if os.path.exists(POSTS_CSV):
-            prev = pd.read_csv(POSTS_CSV)
-            df = pd.concat([prev, df], ignore_index=True)
+        if os.path.exists(POSTS_CSV) and os.path.getsize(POSTS_CSV) > 1:
+            try:
+                prev = pd.read_csv(POSTS_CSV)
+                df = pd.concat([prev, df], ignore_index=True)
+            except pd.errors.EmptyDataError:
+                pass
         # Drop duplicate (email, post_link) pairs accumulated across runs.
-        if "email" in df.columns:
+        if not df.empty and "email" in df.columns:
             df = df.drop_duplicates(subset=["email", "post_link"], keep="first").reset_index(drop=True)
-        df.to_csv(POSTS_CSV, index=False)
-        n_emails = int(df["email"].astype(str).str.contains("@", na=False).sum()) if "email" in df.columns else 0
-        print(f"Saved {len(df)} post records ({n_emails} with emails) to {POSTS_CSV}")
+        # Only overwrite the CSV when we actually have rows, so a 0-result run
+        # doesn't blow away previously-collected data with an empty file.
+        if not df.empty:
+            df.to_csv(POSTS_CSV, index=False)
+        n_emails = int(df["email"].astype(str).str.contains("@", na=False).sum()) if (not df.empty and "email" in df.columns) else 0
+        debug["total_scraped"] = len(scraped)
+        debug["rows_written"] = int(len(df))
+        debug["emails_found"] = n_emails
+        try:
+            import json
+            with open(os.path.join(OUTPUT_DIR, "posts_debug.json"), "w") as f:
+                json.dump(debug, f, indent=2)
+        except Exception:
+            pass
+        print(f"Saved {len(df)} post records ({n_emails} with emails) to {POSTS_CSV}", flush=True)
+        if not scraped:
+            print("No posts were scraped. See output/posts_debug.json for why "
+                  "(login wall, zero tiles, or no recent posts).", flush=True)
 
     def send_emails_for_posts(self, subject_template: str | None = None, body_template: str | None = None, dry_run: bool = False, only_unsent: bool = True):
         """Send emails to addresses found in `posts_emails.csv` using Gmail creds from env.
@@ -1484,7 +1910,11 @@ class LinkedInBot:
             return
         import pandas as pd
 
-        df = pd.read_csv(POSTS_CSV)
+        try:
+            df = pd.read_csv(POSTS_CSV)
+        except pd.errors.EmptyDataError:
+            print("posts_emails.csv is empty — run post search first.")
+            return
         if "email_sent" not in df.columns:
             df["email_sent"] = False
         # Normalise email_sent to real booleans (CSV round-trips can give "True"/NaN).

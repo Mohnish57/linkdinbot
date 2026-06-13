@@ -301,41 +301,35 @@ def bot_send_emails_posts():
     return jsonify({"ok": True, "status": "started"})
 
 # ============================================================ Results
+def _read_csv_safe(path):
+    """Read a results CSV into a list of records, tolerating a missing or
+    empty file (an empty DataFrame written for a 0-result run)."""
+    if not path.exists():
+        return 0, []
+    try:
+        df = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return 0, []
+    df = df.where(pd.notna(df), None)  # JSON-safe: NaN -> null
+    return len(df), df.to_dict(orient="records")[:100]
+
 @app.route("/api/results/jobs", methods=["GET"])
 def get_jobs():
     """Fetch jobs.csv."""
-    jobs_csv = OUTPUT_DIR / "jobs.csv"
-    if jobs_csv.exists():
-        df = pd.read_csv(jobs_csv)
-        return jsonify({
-            "count": len(df),
-            "data": df.to_dict(orient="records")[:100]  # First 100 rows
-        })
-    return jsonify({"count": 0, "data": []})
+    count, data = _read_csv_safe(OUTPUT_DIR / "jobs.csv")
+    return jsonify({"count": count, "data": data})
 
 @app.route("/api/results/connections", methods=["GET"])
 def get_connections():
     """Fetch connections.csv."""
-    conn_csv = OUTPUT_DIR / "connections.csv"
-    if conn_csv.exists():
-        df = pd.read_csv(conn_csv)
-        return jsonify({
-            "count": len(df),
-            "data": df.to_dict(orient="records")[:100]
-        })
-    return jsonify({"count": 0, "data": []})
+    count, data = _read_csv_safe(OUTPUT_DIR / "connections.csv")
+    return jsonify({"count": count, "data": data})
 
 @app.route("/api/results/posts", methods=["GET"])
 def get_posts():
     """Fetch posts_emails.csv."""
-    posts_csv = OUTPUT_DIR / "posts_emails.csv"
-    if posts_csv.exists():
-        df = pd.read_csv(posts_csv)
-        return jsonify({
-            "count": len(df),
-            "data": df.to_dict(orient="records")[:100]
-        })
-    return jsonify({"count": 0, "data": []})
+    count, data = _read_csv_safe(OUTPUT_DIR / "posts_emails.csv")
+    return jsonify({"count": count, "data": data})
 
 @app.route("/api/results/clear", methods=["POST"])
 def clear_results():

@@ -79,9 +79,10 @@ function App() {
     { id: 'setup', label: 'Setup', icon: 'settings', component: TabSetup },
     { id: 'notes', label: 'Notes', icon: 'message', component: TabNotes },
     { id: 'run', label: 'Run', icon: 'play', component: TabRun },
-    { id: 'posts', label: 'Posts', icon: 'document', component: TabPosts },
     { id: 'results', label: 'Results', icon: 'table', component: TabResults },
     { id: 'email', label: 'Email', icon: 'mail', component: TabEmail },
+    // Post outreach is a separate feature — keep it last.
+    { id: 'posts', label: 'Posts', icon: 'document', component: TabPosts },
   ];
 
   const TabComponent = tabs.find(t => t.id === activeTab)?.component || TabSetup;

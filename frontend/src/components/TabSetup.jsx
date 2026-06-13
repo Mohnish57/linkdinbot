@@ -6,11 +6,15 @@ import Icon from './Icon';
 function TabSetup({ config, saveConfig, apiUrl }) {
   const prefs = config.jobPreferences || {};
   const settings = config.settings || {};
+  const candidate = config.candidate || {};
 
+  const [name, setName] = useState(candidate.name || '');
+  const [firstName, setFirstName] = useState(candidate.first_name || '');
+  const [email, setEmail] = useState(candidate.email || '');
+  const [bio, setBio] = useState(candidate.bio_fullstack || '');
   const [positions, setPositions] = useState((prefs.positions || []).join('\n'));
   const [recruiterKeywords, setRecruiterKeywords] = useState((prefs.recruiterKeywords || []).join('\n'));
   const [driveLink, setDriveLink] = useState(settings.resumeDriveLink || '');
-  const [shortening, setShortening] = useState(false);
   const [resume, setResume] = useState(null);
   const [uploading, setUploading] = useState(false);
 
@@ -53,30 +57,18 @@ function TabSetup({ config, saveConfig, apiUrl }) {
     }
   };
 
-  const shortenDriveLink = async () => {
-    if (!driveLink.trim()) {
-      toast.warn('Enter a Drive link first.');
-      return;
-    }
-
-    try {
-      setShortening(true);
-      const res = await axios.post(`${apiUrl}/api/shorten-url`, { url: driveLink.trim() });
-      setDriveLink(res.data.url);
-      toast.success('Link shortened.');
-    } catch (err) {
-      toast.error(`TinyURL shortening failed: ${err.response?.data?.error || err.message}`);
-    } finally {
-      setShortening(false);
-    }
-  };
-
   const save = async () => {
     await saveConfig({
       settings: {
         resumeDriveLink: driveLink.trim(),
         resumeDriveLinkFrontend: driveLink.trim(),
         sendInviteNote: true,
+      },
+      candidate: {
+        name: name.trim(),
+        first_name: firstName.trim(),
+        email: email.trim(),
+        bio_fullstack: bio.trim(),
       },
       jobPreferences: {
         positions: positions.split('\n').map(p => p.trim()).filter(Boolean),
@@ -89,6 +81,39 @@ function TabSetup({ config, saveConfig, apiUrl }) {
   return (
     <div>
       <h2 className="heading-with-icon"><Icon name="settings" /> Setup</h2>
+
+      <div style={{ padding: '14px', border: '1px solid #ddd', borderRadius: '6px', background: '#fff', marginTop: '20px' }}>
+        <label style={{ display: 'block', fontWeight: 600, marginBottom: '8px' }}>Your details</label>
+        <p style={{ marginTop: 0, color: '#777', fontSize: '0.85em' }}>
+          Used to fill <code>{'{candidate_name} {candidate_first_name} {candidate_email} {candidate_bio_long}'}</code> in connection notes &amp; emails.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={{ fontSize: '0.85em' }}>Full name</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="Mohnish Sawlani"
+              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.85em' }}>First name</label>
+            <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Mohnish"
+              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.85em' }}>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.85em' }}>Short bio</label>
+            <input type="text" value={bio} onChange={(e) => setBio(e.target.value)}
+              placeholder="Software Engineer (Node.js, Python, React)"
+              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }} />
+          </div>
+        </div>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
         <div style={{ padding: '14px', border: '1px solid #ddd', borderRadius: '6px', background: '#fff' }}>
@@ -113,14 +138,6 @@ function TabSetup({ config, saveConfig, apiUrl }) {
             placeholder="https://drive.google.com/..."
             style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
           />
-          <button
-            type="button"
-            onClick={shortenDriveLink}
-            disabled={shortening}
-            style={{ marginTop: '10px', padding: '8px 14px', background: '#555', color: 'white', border: 'none', borderRadius: '4px', cursor: shortening ? 'not-allowed' : 'pointer' }}
-          >
-            <span className="button-with-icon"><Icon name="chevronsRight" size={16} /> {shortening ? 'Shortening...' : 'Shorten with TinyURL'}</span>
-          </button>
         </div>
       </div>
 
